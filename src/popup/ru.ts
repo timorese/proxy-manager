@@ -77,6 +77,9 @@ export const ru: Dictionary = {
     '+ Add': '+ Добавить',
     'Enabled sources are combined in this order: the first one that answers with something other than DIRECT wins. Scripts are embedded as data in the PAC given to Chrome; they never run inside the extension.':
       'Включённые источники опрашиваются по порядку: побеждает первый, чей ответ не DIRECT. Скрипты встраиваются как данные в PAC для Chrome и никогда не выполняются внутри расширения.',
+    "Use my proxy servers instead of the PAC's own": 'Использовать мои прокси вместо прокси из PAC',
+    'If a PAC script answers with a proxy, answer with the servers from the Proxy tab instead (DIRECT failover as set in Settings). Useful for generic lists that hard-code 127.0.0.1:1080.':
+      'Если PAC-скрипт отвечает «идти через прокси», подставлять серверы с вкладки «Прокси» (с запасным DIRECT, как в настройках). Нужно для общих списков, где прописан адрес 127.0.0.1:1080.',
     'No PAC sources. Add a URL or paste a script.': 'Нет PAC-источников. Добавьте URL или вставьте скрипт.',
     inline: 'встроенный',
     'failed: {e}': 'ошибка: {e}',

@@ -53,6 +53,8 @@ export interface Settings {
   failoverDirect: boolean;
   /** Plain host names (no dots, e.g. `intranet`) bypass the proxy when no rule matched. */
   bypassLocal: boolean;
+  /** When a PAC source answers with a proxy, answer with the user's own proxy chain instead (legacy "override PAC"). */
+  overridePac: boolean;
   theme: Theme;
   language: Language;
 }
@@ -62,6 +64,7 @@ export const DEFAULT_SETTINGS: Settings = {
   mode: 'direct',
   failoverDirect: true,
   bypassLocal: true,
+  overridePac: false,
   theme: 'auto',
   language: 'auto',
 };

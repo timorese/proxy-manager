@@ -341,7 +341,7 @@ await p3.close();
     res.setHeader('access-control-allow-origin', '*'); // headless Chromium cannot answer the optional-permission prompt
     res.setHeader('content-type', 'application/x-ns-proxy-autoconfig');
     res.end(
-      `function FindProxyForURL(u,h){ return h==="viapac.example" ? "PROXY 127.0.0.1:${PORT}" : "DIRECT"; }`,
+      `function FindProxyForURL(u,h){ return h==="viapac.example" ? "PROXY 127.0.0.1:${PORT}" : h==="override.example" ? "PROXY 127.0.0.1:${PORT + 2}" : "DIRECT"; }`,
     );
   });
   await new Promise((r) => pacSrv.listen(0, '127.0.0.1', r));
@@ -389,6 +389,38 @@ await p3.close();
     'mode PAC: third-party PAC said DIRECT for another host',
   );
   void rev1;
+  // "Use my proxy servers instead of the PAC's own": the script names a dead proxy, the user's proxy list is alive
+  hits.length = 0;
+  await via.goto('http://override.example/', { timeout: 8000 }).catch(() => {});
+  ok(
+    !hits.some((u) => u.includes('override.example')),
+    "override OFF: the PAC's own (dead) proxy is used, nothing reaches the user proxy",
+  );
+  await pp.click('button[data-tab="pac"]');
+  await pp.check('label:has-text("Use my proxy servers") input');
+  await pp.waitForFunction(
+    async () => {
+      const r = await chrome.storage.local.get(['rev', 'state']);
+      return r.state?.appliedRev === r.rev;
+    },
+    null,
+    { timeout: 8000 },
+  );
+  hits.length = 0;
+  await via.goto('http://override.example/', { timeout: 10000 }).catch(() => {});
+  ok(
+    hits.some((u) => u.includes('override.example')),
+    "override ON: the PAC says proxy, the user's proxy chain is used instead",
+  );
+  await pp.uncheck('label:has-text("Use my proxy servers") input');
+  await pp.waitForFunction(
+    async () => {
+      const r = await chrome.storage.local.get(['rev', 'state']);
+      return r.state?.appliedRev === r.rev;
+    },
+    null,
+    { timeout: 8000 },
+  );
   // pacSrv now goes offline: Update must fail gracefully, keep working config, and show the error
   pacSrv.close();
   pacSrv.closeAllConnections?.();

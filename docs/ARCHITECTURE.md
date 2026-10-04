@@ -146,7 +146,7 @@ Chrome at a PAC URL, and the reason MV3's "no remotely hosted code" rule does no
 Each source is wrapped in its own function scope (`function X0(){ <source>; return FindProxyForURL }`), so sources
 cannot clobber each other's globals or ours (tested), and a source that throws at load or at call time is skipped.
 Combination rule: for the `PAC` action (and for the default in `PAC` mode) sources are asked in the listed order and the
-first answer that is not `DIRECT` wins; if none, `DIRECT`. A source that fails validation is excluded from the build and
+first answer that is not `DIRECT` wins; if none, `DIRECT`. With *Use my proxy servers instead of the PAC's own* enabled (and at least one proxy enabled) the combined PAC answers with the user's proxy chain whenever a source answers with anything other than `DIRECT` (legacy "override PAC"). A source that fails validation is excluded from the build and
 reported (`PAC compilation failed`), it never breaks the rest. The validator is lexical, not a JS parser: a script that
 passes can still contain a semantic error; Chrome then reports it via `onProxyError` (`Proxy error` in the popup) and
 `mandatory:false` makes Chrome fall back to DIRECT instead of blocking traffic.

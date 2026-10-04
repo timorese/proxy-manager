@@ -5,7 +5,7 @@ import type { PacSource } from '../../types/index.ts';
 import { h, setChildren, setText } from '../dom.ts';
 import { ago, fmtBytes } from '../format.ts';
 import { t } from '../i18n.ts';
-import { commit, refreshPac, repos, store, syncNow } from '../store.ts';
+import { commit, refreshPac, repos, saveSettings, store, syncNow } from '../store.ts';
 import type { View } from './types.ts';
 
 const REFRESH_CHOICES = [
@@ -323,6 +323,16 @@ export function createPacsView(): View {
     name.focus();
   };
 
+  const overrideBox = h('input', {
+    type: 'checkbox',
+    checked: store.snap.settings.overridePac,
+    on: {
+      change: () => {
+        void saveSettings({ overridePac: overrideBox.checked }).then(() => syncNow().catch(() => {}));
+      },
+    },
+  });
+
   const el = h(
     'div',
     { class: 'view-enter', style: 'display:flex;flex-direction:column;gap:10px' },
@@ -343,6 +353,22 @@ export function createPacsView(): View {
         'Enabled sources are combined in this order: the first one that answers with something other than DIRECT wins. Scripts are embedded as data in the PAC given to Chrome; they never run inside the extension.',
       ),
     }),
+    h(
+      'label',
+      { class: 'check card', style: 'margin:0' },
+      overrideBox,
+      h(
+        'span',
+        null,
+        t("Use my proxy servers instead of the PAC's own"),
+        h('div', {
+          class: 'small muted',
+          text: t(
+            'If a PAC script answers with a proxy, answer with the servers from the Proxy tab instead (DIRECT failover as set in Settings). Useful for generic lists that hard-code 127.0.0.1:1080.',
+          ),
+        }),
+      ),
+    ),
     formHost,
     listEl,
     msg,

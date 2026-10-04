@@ -54,7 +54,12 @@ function readLegacyIdb(): Promise<LegacyData['pacScripts']> {
 export async function runInPlaceMigration(repos: Repositories): Promise<boolean> {
   const kv = chromeArea();
   if ((await kv.get(FLAG))[FLAG]) return false;
-  const stored = (await kv.get(['domainExceptions', 'proxies', 'proxyActive'])) as LegacyData;
+  const stored = (await kv.get([
+    'domainExceptions',
+    'proxies',
+    'proxyActive',
+    'overridePacScript',
+  ])) as LegacyData;
   const hasLegacyKv = stored.domainExceptions !== undefined || Array.isArray(stored.proxies);
   const pacScripts = await readLegacyIdb();
   if (!hasLegacyKv && !pacScripts?.length) return false;

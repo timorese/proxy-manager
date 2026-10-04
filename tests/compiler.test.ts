@@ -242,3 +242,40 @@ describe('PAC output matches the reference matcher (randomised)', () => {
     }
   });
 });
+
+describe("PacCompiler: override PAC proxies with the user's own", () => {
+  const generic =
+    'function FindProxyForURL(u,h){ return h==="blocked.example" ? "HTTP 127.0.0.1:1080; SOCKS5 127.0.0.1:1080; DIRECT" : "DIRECT"; }';
+  const run = (overridePac: boolean, proxies = [proxy('10.0.0.5', 1081, 'socks5')]) =>
+    loadPac(
+      compilePac(base({ mode: 'pac', overridePac, proxies, sources: [{ id: 's', text: generic }] })).text,
+    );
+
+  it("off: the PAC's own proxies are used", () => {
+    expect(resolveHost(run(false), 'blocked.example')).toBe(
+      'HTTP 127.0.0.1:1080; SOCKS5 127.0.0.1:1080; DIRECT',
+    );
+  });
+  it('on: the user chain replaces the PAC answer; DIRECT answers stay DIRECT', () => {
+    const f = run(true);
+    expect(resolveHost(f, 'blocked.example')).toBe('SOCKS5 10.0.0.5:1081; DIRECT');
+    expect(resolveHost(f, 'other.example')).toBe('DIRECT');
+  });
+  it('on without any enabled proxy: no effect (PAC answer kept)', () => {
+    expect(resolveHost(run(true, []), 'blocked.example')).toBe(
+      'HTTP 127.0.0.1:1080; SOCKS5 127.0.0.1:1080; DIRECT',
+    );
+  });
+  it('applies to PAC rules too', () => {
+    const f = loadPac(
+      compilePac(
+        base({
+          overridePac: true,
+          rules: [r('blocked.example', 'pac')],
+          sources: [{ id: 's', text: generic }],
+        }),
+      ).text,
+    );
+    expect(resolveHost(f, 'blocked.example')).toBe('SOCKS5 1.2.3.4:1080; DIRECT');
+  });
+});

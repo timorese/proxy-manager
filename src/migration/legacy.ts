@@ -19,6 +19,8 @@ export interface LegacyData {
   /** chrome.storage.local.proxies: `[{ id, url: "socks5://1.2.3.4:1080" }]` */
   proxies?: { id?: unknown; url?: unknown }[];
   proxyActive?: boolean;
+  /** chrome.storage.local.overridePacScript: legacy default is ON (anything but `false`). */
+  overridePacScript?: boolean;
   /** IndexedDB PacProxyManagerDB.pacScripts */
   pacScripts?: {
     id?: unknown;
@@ -96,9 +98,9 @@ export function mapLegacy(data: LegacyData, now = Date.now()): MigrationPlan {
     ...DEFAULT_SETTINGS,
     enabled: Boolean(data.proxyActive) || hasPac,
     mode: hasPac ? 'pac' : 'direct',
+    // legacy "override PAC": the user's proxies replace whatever proxy a PAC script answers with
+    overridePac:
+      hasPac && proxies.length > 0 && data.overridePacScript !== false && Boolean(data.proxyActive),
   };
-  if (proxies.length > 0 && hasPac && data.proxyActive) {
-    warnings.push('legacy "override PAC" has no equivalent: PAC sources now answer with their own proxies');
-  }
   return { settings, proxies, rules, pacs, warnings };
 }

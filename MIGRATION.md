@@ -18,7 +18,7 @@ Manager 1.x**:
 2. Paste (verified against the real 1.1.2 build):
 
 ```js
-(async()=>{const kv=await chrome.storage.local.get(["domainExceptions","proxies","proxyActive"]);const db=await new Promise((r,j)=>{const q=indexedDB.open("PacProxyManagerDB");q.onsuccess=()=>r(q.result);q.onerror=()=>j(q.error)});const pacScripts=await new Promise(r=>{const q=db.transaction("pacScripts").objectStore("pacScripts").getAll();q.onsuccess=()=>r(q.result)});const out=JSON.stringify({...kv,pacScripts});copy(out);return out.length+" chars copied"})()
+(async()=>{const kv=await chrome.storage.local.get(["domainExceptions","proxies","proxyActive","overridePacScript"]);const db=await new Promise((r,j)=>{const q=indexedDB.open("PacProxyManagerDB");q.onsuccess=()=>r(q.result);q.onerror=()=>j(q.error)});const pacScripts=await new Promise(r=>{const q=db.transaction("pacScripts").objectStore("pacScripts").getAll();q.onsuccess=()=>r(q.result)});const out=JSON.stringify({...kv,pacScripts});copy(out);return out.length+" chars copied"})()
 ```
 
 3. Paste the clipboard into the new extension's import box and press **Import**.
@@ -37,6 +37,7 @@ format, and `yes` / `no` as aliases for `PROXY` / `DIRECT`.
 | `proxies[].url` (`socks5://h:p`, `http://…`) | `ProxyServer` (scheme, host, port; default ports 80/443/1080) |
 | `pacScripts[]` with `sourceType: 'url'` | PAC source, kind URL, last downloaded body kept, refresh = manual |
 | `pacScripts[]` with `sourceType: 'plain'` | PAC source, kind inline |
+| `overridePacScript !== false` (with proxies) | PAC tab option *use my proxy servers instead of the PAC's own* |
 | `proxyActive` or any enabled PAC script | master switch ON |
 | no enabled PAC scripts | default mode **Direct** (legacy sent only `yes` domains through the proxy) |
 | enabled PAC scripts | default mode **PAC** |
@@ -45,10 +46,8 @@ Invalid domains/proxies are skipped and reported in the import message.
 
 ## Behaviour that does not carry over exactly
 
-- **"Override PAC proxies with mine"** (legacy `overridePacScript`): legacy replaced whatever proxy a PAC script
-  returned with the user's proxy list. The new model has no equivalent; PAC sources answer with their own proxies. The
-  importer warns when this setting was relevant. If you relied on it, set the default mode to **Proxy** and add
-  `PAC` rules for the domains the script should decide.
+- **"Override PAC proxies with mine"** (legacy `overridePacScript`) is now **PAC tab → "Use my proxy servers instead of the PAC's own"**.
+  The importer turns it on when the legacy setting was on (its default) and you had proxies and the proxy active.
 - Legacy PAC scripts were pasted *inside* `function userPacScriptN(){…}`. They are now isolated per source in their own
   function scope, which is stricter; a script that depended on leaking globals into other scripts will not.
 - Legacy refreshed nothing automatically. Imported URL sources start with refresh = manual; set an interval in the PAC tab.

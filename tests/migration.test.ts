@@ -63,8 +63,10 @@ describe('legacy -> new model mapping', () => {
     const p = mapLegacy({ ...LEGACY, pacScripts: [] });
     expect(p.settings).toMatchObject({ enabled: true, mode: 'direct' });
   });
-  it('warns about the unrepresentable "override PAC" behaviour', () => {
-    expect(plan.warnings.join('|')).toMatch(/override PAC/);
+  it('maps legacy "override PAC" (default ON) to the new overridePac setting', () => {
+    expect(plan.settings.overridePac).toBe(true);
+    expect(mapLegacy({ ...LEGACY, overridePacScript: false }).settings.overridePac).toBe(false);
+    expect(mapLegacy({ ...LEGACY, proxies: [] }).settings.overridePac).toBe(false);
   });
 
   it('applied plan produces working routing end-to-end', async () => {

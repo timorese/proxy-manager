@@ -120,6 +120,7 @@ export class SyncEngine {
         mode: settings.mode,
         failoverDirect: settings.failoverDirect,
         bypassLocal: settings.bypassLocal,
+        overridePac: settings.overridePac,
         proxies: enabledProxies,
         rules: rules.filter((r) => r.enabled),
         sources: usable,

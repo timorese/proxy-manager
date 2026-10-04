@@ -8,6 +8,8 @@ export interface PacConfig {
   mode: Mode;
   failoverDirect: boolean;
   bypassLocal: boolean;
+  /** PAC sources' proxy answers are replaced by the user's proxy chain (only effective when a proxy is enabled). */
+  overridePac?: boolean;
   /** Enabled proxies only, in failover order. */
   proxies: readonly ProxyServer[];
   /** Enabled rules only. */
@@ -20,6 +22,7 @@ export interface NormalizedConfig {
   mode: Mode;
   chain: string; // '' when there are no proxies
   bypassLocal: boolean;
+  overridePac: boolean;
   sources: readonly { id: string; text: string }[];
   /** Effective rules after dedupe + redundancy elimination, keyed by normalised pattern. */
   exact: Map<string, Action>;
@@ -99,6 +102,7 @@ export function normalize(cfg: PacConfig): NormalizedConfig {
     mode: cfg.mode,
     chain,
     bypassLocal: cfg.bypassLocal,
+    overridePac: Boolean(cfg.overridePac) && hasProxy && hasPac,
     sources: cfg.sources,
     exact,
     wild,
@@ -132,7 +136,8 @@ export function compile(n: NormalizedConfig): CompileResult {
     return { kind: 'direct', text: '', rulesCompiled, stats, warnings: n.warnings };
   }
 
-  const usesProxy = fallback === 'proxy' || [...exact.keys(), ...wild.keys()].includes(ACTION_CODE.proxy);
+  const usesProxy =
+    n.overridePac || fallback === 'proxy' || [...exact.keys(), ...wild.keys()].includes(ACTION_CODE.proxy);
   const usesPac = fallback === 'pac' || [...exact.keys(), ...wild.keys()].includes(ACTION_CODE.pac);
 
   let out = 'var D="DIRECT"';
@@ -147,7 +152,9 @@ export function compile(n: NormalizedConfig): CompileResult {
       out += `try{var f${i}=X${i}();f${i}&&S.push(f${i})}catch(e){}`;
     });
     out +=
-      'function Q(u,h){for(var i=0,r;i<S.length;i++){try{r=S[i](u,h)}catch(e){continue}if(r&&r!==D)return r}return D}';
+      'function Q(u,h){for(var i=0,r;i<S.length;i++){try{r=S[i](u,h)}catch(e){continue}if(r&&r!==D)return ' +
+      (n.overridePac ? 'P' : 'r') +
+      '}return D}';
   }
 
   const hasExact = exact.size > 0;

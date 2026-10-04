@@ -14,7 +14,7 @@ This is a from-scratch rewrite, not a fork — see [`docs/PERFORMANCE_AUDIT.md`]
   Priority: exact → most specific wildcard → default mode. Search, sort, bulk enable/disable/delete/set-action, "test a host",
   text import/export (`example.com`, `example.com DIRECT`, `#off …` for disabled), 50 000 rules without lag.
 - PAC sources: remote URL (conditional requests, timeout, periodic refresh via `chrome.alarms`, last-good fallback) or
-  inline script; several, each enable/disable-able, combined safely (see ARCHITECTURE.md).
+  inline script; several, each enable/disable-able, combined safely (see ARCHITECTURE.md). Optional "use my proxy servers instead of the PAC's own" for generic lists that hard-code a proxy address (e.g. antizapret's `127.0.0.1:1080`).
 - Errors shown in the popup: PAC fetch failed · PAC compilation failed · Proxy config rejected · Invalid proxy ·
   Invalid domain rule · controlled by another extension. **Export diagnostics** contains no domains, hosts or URL paths.
 - English and Russian UI (Settings → Language; follows the browser language by default). The Russian dictionary is a separate lazy chunk that English users never load; a test fails if any string lacks a translation.
