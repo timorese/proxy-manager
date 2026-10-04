@@ -1,0 +1,28 @@
+{
+  "name": "pac-proxy-manager-next",
+  "version": "2.0.0",
+  "private": true,
+  "description": "Fast PAC proxy manager for Chrome/Chromium (Manifest V3)",
+  "type": "module",
+  "scripts": {
+    "dev": "vite build --watch --mode development",
+    "build": "vite build && node scripts/report-bundle.mjs",
+    "test": "vitest run",
+    "lint": "biome check src tests benchmarks scripts",
+    "lint:fix": "biome check --write src tests benchmarks scripts",
+    "typecheck": "tsc --noEmit",
+    "benchmark": "node benchmarks/run.ts",
+    "benchmark:legacy": "node benchmarks/legacy-baseline.mjs",
+    "benchmark:browser": "node benchmarks/browser.mjs",
+    "icons": "node scripts/make-icons.mjs"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.5.15",
+    "@types/chrome": "^0.3.4",
+    "@types/node": "^26.6.4",
+    "fake-indexeddb": "^6.2.5",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.2",
+    "vitest": "^5.0.3"
+  }
+}
