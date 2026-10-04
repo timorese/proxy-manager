@@ -1,165 +1,155 @@
-# Performance audit of `ilyachase/pac-proxy-manager-extension` (v1.1.2)
+# Аудит производительности `ilyachase/pac-proxy-manager-extension` (v1.1.2)
 
-Method: full read of `src/background.js`, `src/utils/*`, all popup tabs, `manifest.json`,
-`vite.config.js`; production build (`vite build`) for bundle sizes; the legacy
-`ProxyManager.generateCombinedPacScript()` was executed in Node and the produced PAC was
-loaded into a `vm` context to measure real `FindProxyForURL` cost
-(`benchmarks/legacy-baseline.mjs`, run with `LEGACY_DIR=<clone>`).
+Метод: полностью прочитаны `src/background.js`, `src/utils/*`, все вкладки popup, `manifest.json`, `vite.config.js`;
+боевая сборка (`vite build`) для размеров бандла; генератор `ProxyManager.generateCombinedPacScript()` старой версии выполнен в Node,
+а полученный PAC загружен в контекст `vm`, чтобы измерить реальную стоимость `FindProxyForURL`
+(`benchmarks/legacy-baseline.mjs`, запуск с `LEGACY_DIR=<клон>`).
 
-## Measured baseline (legacy)
+## Измеренная базовая линия (старая версия)
 
-Rules = domain exceptions (every 5th is `*.wildcard`), one SOCKS5 proxy, no PAC scripts.
-Lookup is per *request* and runs in the browser's PAC thread, so it directly adds latency to navigation.
+Правила = исключения доменов (каждое 5-е — `*.маска`), один SOCKS5-прокси, PAC-скриптов нет.
+Поиск выполняется на каждый *запрос* в потоке PAC браузера, поэтому он напрямую добавляет задержку к навигации.
 
-| rules  | PAC size | generate | lookup miss | lookup exact hit |
+| правил | размер PAC | генерация | поиск: промах | поиск: точное совпадение |
 |-------:|---------:|---------:|------------:|-----------------:|
-| 100    | 4 KB     | 0.2 ms   | 5 µs        | 2 µs             |
-| 1 000  | 30 KB    | 0.4 ms   | 25 µs       | 15 µs            |
-| 10 000 | 302 KB   | 2.6 ms   | **1.57 ms** | 0.43 ms          |
-| 50 000 | 1.55 MB  | 17 ms    | **12 ms**   | 3.9 ms           |
+| 100    | 4 КБ     | 0,2 мс   | 5 мкс       | 2 мкс            |
+| 1 000  | 30 КБ    | 0,4 мс   | 25 мкс      | 15 мкс           |
+| 10 000 | 302 КБ   | 2,6 мс   | **1,57 мс** | 0,43 мс          |
+| 50 000 | 1,55 МБ  | 17 мс    | **12 мс**   | 3,9 мс           |
 
-Bundle: `popup.js` **291 KB** (87 KB gzip), `popup.css` 22 KB, `background.js` 4.5 KB (+1.7 KB chunk).
-574 modules transformed (React 18 + ReactDOM + Headless UI + Heroicons + react-hot-toast + Tailwind).
+Бандл: `popup.js` **291 КБ** (87 КБ gzip), `popup.css` 22 КБ, `background.js` 4,5 КБ (+ фрагмент 1,7 КБ).
+Преобразовано 574 модуля (React 18 + ReactDOM + Headless UI + Heroicons + react-hot-toast + Tailwind).
 
-## Findings
+## Находки
 
-Severity: **C** critical, **H** high, **M** medium, **L** low.
+Серьёзность: **C** критично, **H** высоко, **M** средне, **L** низко.
 
-### 1. Lookup is O(N) per request — **C**
-- Where: `proxyManager.js` `generateCombinedPacScript`, the `for (const domain in domainExceptions)` loop.
-- Why: for every host that is not an exact key, the PAC iterates *all* rules and does `startsWith('*.')`
-  + `endsWith`. Misses (the common case: most sites are not in the list) always pay the full scan.
-  12 ms per request at 50k rules runs on the proxy-resolution path of every navigation/subresource.
-- Fix: PAC lookup is O(labels in host): compile-time hash maps, walk the host's suffixes
-  (`a.b.c.com` → `b.c.com` → `c.com` → `com`) with 1 object lookup each. Independent of N.
+### 1. Поиск выполняется за O(N) на каждый запрос — **C**
+- Где: `proxyManager.js`, `generateCombinedPacScript`, цикл `for (const domain in domainExceptions)`.
+- Почему: для каждого хоста, которого нет среди точных ключей, PAC перебирает *все* правила и делает `startsWith('*.')` + `endsWith`.
+  Промахи (самый частый случай: большинства сайтов нет в списке) всегда оплачивают полный перебор. 12 мс на запрос при 50 000 правил
+  выполняются на пути определения прокси при каждой навигации.
+- Решение: поиск в PAC за O(числа меток в хосте): хеш-таблицы, собранные заранее, обход суффиксов хоста (`a.b.c.com` → `b.c.com` → `c.com` → `com`),
+  по одному обращению к объекту на каждый. Не зависит от N.
 
-### 2. Rules stored as a single object in one `chrome.storage.local` key — **H**
-- Where: `ExceptionsTab.jsx` `saveException`, `handleBulkImport`; `ProxyManager.updateProxySettings`.
-- Why: adding one domain does `{...exceptions}` (O(N) copy), then structured-clones and writes the whole map,
-  then `storage.onChanged` fires with old+new values of the whole map. The background re-reads the entire map
-  and rebuilds the PAC. A single toggle costs O(N) in popup, storage and background.
-- Fix: rules live in IndexedDB as individual records (one transaction for imports); the PAC is built from a
-  single `getAll`, only when the *rules revision* changes; popup never ships the whole map through messages.
+### 2. Правила хранятся одним объектом в одном ключе `chrome.storage.local` — **H**
+- Где: `ExceptionsTab.jsx`, `saveException`, `handleBulkImport`; `ProxyManager.updateProxySettings`.
+- Почему: добавление одного домена делает `{...exceptions}` (копирование за O(N)), затем клонирует и пишет весь словарь,
+  после чего `storage.onChanged` приходит со старым и новым значением всего словаря. Фон перечитывает весь словарь и пересобирает PAC.
+  Одно переключение стоит O(N) в popup, в хранилище и в фоне.
+- Решение: правила лежат в IndexedDB (в итоге — корзинами, см. ARCHITECTURE.md); PAC собирается из одного чтения только когда изменилась
+  *ревизия правил*; popup никогда не пересылает весь словарь в сообщениях.
 
-### 3. Every change rebuilds PAC and re-applies it, no hash check — **H**
-- Where: `storage.onChanged` listener (`proxyManager.js` `init`), `pacScriptsUpdated`, `activateProxy`, `togglePacScript`.
-- Why: `chrome.proxy.settings.set()` with a new `pac_script` makes Chrome re-parse the script and, in practice,
-  drop proxy-resolution caches/pooled connections. Legacy calls it on any relevant key change, even when the
-  generated PAC is byte-identical (e.g. `proxies` rewritten with the same value, `overridePacScript` flip with no
-  proxies).
-- Fix: PAC hash (FNV-1a 64 over the compiled text) + `appliedHash` persisted in `chrome.storage.session`/`local`;
-  `set()` only when the hash differs.
+### 3. Каждое изменение пересобирает и заново применяет PAC, хеш не сравнивается — **H**
+- Где: обработчик `storage.onChanged` (`proxyManager.js`, `init`), `pacScriptsUpdated`, `activateProxy`, `togglePacScript`.
+- Почему: `chrome.proxy.settings.set()` с новым `pac_script` заставляет Chrome заново разобрать скрипт и, на практике, сбросить кеши определения
+  прокси и пул соединений. Старая версия вызывает его при любом изменении нужного ключа, даже если сгенерированный PAC побайтно тот же
+  (например, `proxies` перезаписаны тем же значением, переключён `overridePacScript` без прокси).
+- Решение: хеш PAC (SHA-256 по собранному тексту) + `appliedHash` в хранилище; `set()` только при отличии хеша.
 
-### 4. Double/triple work per user action — **H**
-- Where: `ProxiesTab.jsx`: `storage.local.set({proxies})` (→ `onChanged` → rebuild) **and** `sendMessage('activateProxy')`
-  (→ `set` again → rebuild again). `PacScriptsTab.jsx`: IndexedDB write + `sendMessage('pacScriptsUpdated')`.
-  `togglePacScript` in background does `getAll`, `find`, `put`, then `updateProxySettings` (another `getAll` + storage get).
-- Why: 2–3 full rebuilds, 2–4 storage reads and several round-trips to the service worker per click.
-- Fix: a single `commit` message; the worker owns the "apply" step; storage writes themselves never trigger a rebuild
-  (worker is notified once, debounced, with a revision number).
+### 4. Двойная и тройная работа на каждое действие пользователя — **H**
+- Где: `ProxiesTab.jsx`: `storage.local.set({proxies})` (→ `onChanged` → пересборка) **и** `sendMessage('activateProxy')` (→ снова `set` → снова пересборка).
+  `PacScriptsTab.jsx`: запись в IndexedDB + `sendMessage('pacScriptsUpdated')`. `togglePacScript` в фоне делает `getAll`, `find`, `put`, затем
+  `updateProxySettings` (ещё один `getAll` + чтение хранилища).
+- Почему: 2–3 полных пересборки, 2–4 чтения хранилища и несколько обращений к service worker на один щелчок.
+- Решение: единое сообщение `commit`; применением занимается воркер; сами записи в хранилище пересборку не вызывают (воркер получает одно
+  уведомление с номером ревизии, с debounce).
 
-### 5. Service worker does heavy work on every wake — **H**
-- Where: `new ProxyManager()` at top-level; `init()` reads all PAC scripts from IndexedDB and, if any is enabled,
-  calls `updateProxySettings()` (full rebuild + `proxy.settings.set`) on **every** worker start.
-  MV3 workers are killed after ~30 s idle, so this repeats constantly.
-- Fix: on wake the worker does nothing unless the event requires it. On `runtime.onStartup` it only verifies
-  `appliedHash` against the stored config hash (O(1), no compile).
+### 5. Service worker делает тяжёлую работу при каждом пробуждении — **H**
+- Где: `new ProxyManager()` на верхнем уровне; `init()` читает все PAC-скрипты из IndexedDB и, если хоть один включён, вызывает
+  `updateProxySettings()` (полная пересборка + `proxy.settings.set`) при **каждом** запуске воркера. Воркеры MV3 убиваются примерно через 30 с простоя,
+  так что это повторяется постоянно.
+- Решение: при пробуждении воркер ничего не делает, пока событие этого не требует. На `runtime.onStartup` он только сверяет `appliedHash` с сохранённым
+  хешем настроек (O(1), без сборки).
 
-### 6. In-memory state in worker (`this.isProxyActive`) — **M**
-- Where: `ProxyManager` constructor. Lost on worker restart; never read for decisions but indicates the design assumption.
-- Fix: all state is in storage; worker is stateless.
+### 6. Состояние в памяти воркера (`this.isProxyActive`) — **M**
+- Где: конструктор `ProxyManager`. Теряется при перезапуске воркера; для решений не читается, но выдаёт саму предпосылку дизайна.
+- Решение: всё состояние в хранилище; воркер без состояния.
 
-### 7. Remote PAC fetched in the popup, stored as source and *inlined into generated JS* — **H** (perf + security)
-- Where: `PacScriptsTab.jsx` `fetchPacScript`; `generateCombinedPacScript` injects `${script.content}` inside a function body.
-- Why: fetch lives in popup (dies when popup closes → no refresh, no timeout/AbortController handling beyond the browser),
-  no ETag/If-Modified-Since, no refresh schedule. Pasting a remote file inside `function userPacScriptN(){ ... }`
-  breaks on scripts with top-level `function` redeclarations/`'use strict'`, and hides their helper names
-  (`dnsResolve`, etc. work, but nested re-declaration of `FindProxyForURL` inside the wrapper is fragile).
-  A syntax error in one remote script breaks the *whole* combined PAC and there is no validation.
-- Fix: updater runs in the worker, triggered by `chrome.alarms`, with conditional requests, timeout, last-good
-  content retained; sources are wrapped in an IIFE-per-source namespace and validated (`new Function` is
-  **not** used — validation is a static structural check, and a failing source is excluded from the build, see ARCHITECTURE.md).
+### 7. Удалённый PAC скачивается в popup, хранится как исходник и *вставляется в сгенерированный JS* — **H** (производительность и безопасность)
+- Где: `PacScriptsTab.jsx`, `fetchPacScript`; `generateCombinedPacScript` подставляет `${script.content}` внутрь тела функции.
+- Почему: загрузка живёт в popup (умирает вместе с ним → нет обновления, нет таймаута и `AbortController` помимо браузерных), нет ETag/If-Modified-Since,
+  нет расписания обновления. Вставка удалённого файла внутрь `function userPacScriptN(){ ... }` ломается на скриптах с объявлениями функций верхнего уровня
+  и `'use strict'` и скрывает их вспомогательные имена. Синтаксическая ошибка в одном удалённом скрипте ломает *весь* объединённый PAC, а проверки нет.
+- Решение: загрузчик работает в воркере по `chrome.alarms`, с условными запросами, таймаутом и сохранением последней рабочей версии; источники
+  оборачиваются в собственную область видимости и проверяются (`new Function` **не** используется: проверка статическая, структурная; сломанный источник
+  исключается из сборки, см. ARCHITECTURE.md).
 
-### 8. Hot path allocates / uses closures per call — **M**
-- Where: generated `FindProxyForURL`: defines `checkDomainException` closure and a `const hasUserProxies` etc. **per call**,
-  `JSON.stringify`'d rule object literal is re-parsed by V8 when PAC loads (a 1.5 MB object literal at 50k rules).
-- Fix: static tables emitted once at script scope; `FindProxyForURL` has no inner function definitions.
+### 8. Горячий путь выделяет память и создаёт замыкания на каждый вызов — **M**
+- Где: сгенерированный `FindProxyForURL`: определяет замыкание `checkDomainException` и константы `hasUserProxies` и т. п. **на каждый вызов**;
+  литерал объекта из `JSON.stringify` V8 заново разбирает при загрузке PAC (литерал 1,5 МБ при 50 тыс. правил).
+- Решение: статические таблицы выдаются один раз; в `FindProxyForURL` нет вложенных определений функций.
 
-### 9. Popup: 291 KB of JS parsed on every open — **H**
-- Where: React + ReactDOM + Headless UI + Heroicons + react-hot-toast; all 4 tabs imported eagerly
-  (`PopupApp.jsx`); Headless UI `TabPanels` mount every tab.
-- Why: popup is a fresh page each open; parse+execute of ~300 KB (87 KB gz) is the floor on cold start,
-  followed by IndexedDB open + `storage.local.get` + `runtime.sendMessage` (which may wake a dead service worker
-  — 50–200 ms) before the skeleton is replaced.
-- Fix: no framework in the first-paint path (see ARCHITECTURE.md); <15 KB gz target.
+### 9. Popup: 291 КБ JS разбираются при каждом открытии — **H**
+- Где: React + ReactDOM + Headless UI + Heroicons + react-hot-toast; все 4 вкладки импортируются сразу (`PopupApp.jsx`); `TabPanels` из Headless UI монтирует каждую вкладку.
+- Почему: popup — свежая страница при каждом открытии; разбор и исполнение примерно 300 КБ (87 КБ gz) — нижняя граница холодного старта, после чего идут
+  открытие IndexedDB + `storage.local.get` + `runtime.sendMessage` (который может разбудить мёртвый service worker — 50–200 мс), и только потом заглушка заменяется.
+- Решение: никакого фреймворка на пути к первой отрисовке (см. ARCHITECTURE.md); цель <15 КБ gz.
 
-### 10. `chrome.i18n.getMessage` × ~30 per tab mount, put into React state — **L**
-- Where: every tab `useEffect` → `setMessages`. Causes an extra render pass per tab. Fix: lookup lazily / static strings.
+### 10. `chrome.i18n.getMessage` × около 30 при монтировании каждой вкладки, результат кладётся в состояние React — **L**
+- Где: `useEffect` каждой вкладки → `setMessages`. Лишний проход отрисовки на вкладку. Решение: получать строки лениво или использовать статические.
 
-### 11. Exceptions UI rebuilds big strings in effects — **M**
-- Where: `ExceptionsTab.jsx` effect on `[exceptions]`: `Object.keys(...).filter(...).join('\n')` twice and two `setState`
-  after *every* exception change, then textarea re-renders with up to megabytes of text. There is no list view: the only
-  way to see/edit rules is a raw textarea, so search/sort/bulk operations are not possible, and 10k lines in a controlled
-  textarea re-render on every keystroke.
-- Fix: virtualised list + search index; textarea only used for import input and is uncontrolled.
+### 11. Интерфейс исключений собирает большие строки в эффектах — **M**
+- Где: эффект `ExceptionsTab.jsx` по `[exceptions]`: дважды `Object.keys(...).filter(...).join('\n')` и два `setState` после *каждого* изменения
+  исключений, затем перерисовка textarea с текстом до нескольких мегабайт. Списка нет: посмотреть и править правила можно только в сыром textarea,
+  поэтому поиск, сортировка и массовые операции невозможны, а 10 тыс. строк в управляемом textarea перерисовываются при каждом нажатии клавиши.
+- Решение: виртуализированный список + поисковый индекс; textarea только для ввода при импорте, неуправляемый.
 
-### 12. IndexedDB layer issues — **M**
-- Where: `indexedDB.js`: `savePacScripts` calls `store.clear()` and `store.add()` without waiting on requests and
-  returns `Promise.all` of IDBRequest objects (not promises) → ordering/error handling is accidental;
-  `getPacScripts` is `getAll` of full script bodies (MBs) even when the UI only needs names/status; no revision/hash.
-  PAC *content* and *metadata* are one record, so a toggle rewrites the full script text.
-- Fix: metadata and body are separate records; toggles touch only metadata; batched single-transaction writes.
+### 12. Проблемы слоя IndexedDB — **M**
+- Где: `indexedDB.js`: `savePacScripts` вызывает `store.clear()` и `store.add()` без ожидания запросов и возвращает `Promise.all` из объектов IDBRequest
+  (не промисов) → порядок и обработка ошибок случайны; `getPacScripts` — это `getAll` по полным текстам скриптов (мегабайты), даже если интерфейсу нужны только имена
+  и статус; нет ревизии и хеша. Метаданные и текст PAC — одна запись, поэтому переключатель переписывает весь текст скрипта.
+- Решение: метаданные и тексты разделены; переключатели трогают только метаданные; пакетные записи в одной транзакции.
 
-### 13. Permissions broader than needed — **M** (privacy)
-- `host_permissions: http://*/*, https://*/*` + `activeTab`. Needed only to dodge CORS when fetching PAC URLs from the popup
-  and to read the active tab URL. Fix: no host permissions; PAC fetch from the worker uses `optional_host_permissions`
-  requested per-origin only when the user adds a PAC URL (the PAC server's origin only).
+### 13. Разрешения шире нужного — **M** (приватность)
+- `host_permissions: http://*/*, https://*/*` + `activeTab`. Нужны только чтобы обойти CORS при загрузке URL PAC из popup и читать адрес активной вкладки.
+  Решение: без host-разрешений; загрузка PAC из воркера использует `optional_host_permissions`, запрашиваемые только для origin PAC-сервера при добавлении источника.
 
-### 14. Failures are swallowed — **M**
-- `catch (_error) { // Silently ignore }` in `updateProxySettings`; `getProxyStatus` can't surface "rejected by Chrome" /
-  "controlled by other extension" reasons beyond a boolean. Fix: persisted `lastError` with typed codes, shown in popup.
+### 14. Ошибки глотаются — **M**
+- `catch (_error) { // Silently ignore }` в `updateProxySettings`; `getProxyStatus` не умеет показать «отклонено Chrome» / «управляется другим расширением»
+  кроме как булевым значением. Решение: сохраняемый `lastError` с типизированными кодами, показывается в popup.
 
-### 15. Domain validation regex — **L**
-- `domainValidation.js` uses a nested-quantifier regex executed per line; fine for hundreds of lines but it is re-run
-  on every keystroke path and rejects valid inputs (IP literals, underscores, IDN/punycode, single-label hosts such as `localhost`).
-- Fix: char-code scanner (no regex), IDN via `URL`-free punycode handling by `domainToASCII`-like normalisation only in import path.
+### 15. Регулярное выражение проверки домена — **L**
+- `domainValidation.js` использует регулярное выражение с вложенными квантификаторами для каждой строки; для сотен строк нормально, но оно повторно
+  выполняется на каждое нажатие клавиши и отвергает допустимый ввод (IP-адреса, подчёркивания, IDN/punycode, односложные хосты вроде `localhost`).
+- Решение: сканер по кодам символов (без регулярных выражений), IDN приводится к ASCII только при импорте.
 
-## What is *not* the problem
-- React render counts on small lists: popup interactions on ≤100 rules are cheap; the user-visible lag comes from
-  (a) cold start of a 291 KB bundle + 3 async round trips, (b) the O(N) storage/PAC pipeline on every edit, and
-  (c) O(N) PAC lookup that slows real page loads. Replacing React alone would fix (a) only partially.
+## Что проблемой *не* является
+- Количество перерисовок React на малых списках: взаимодействие в popup при ≤100 правил дёшево. Заметные задержки дают
+  (а) холодный старт бандла 291 КБ + 3 асинхронных обращения, (б) конвейер за O(N) для хранилища и PAC на каждую правку и
+  (в) поиск за O(N) в PAC, замедляющий реальную загрузку страниц. Одна лишь замена React починила бы только (а), и то не полностью.
 
-## Resolution map
+## Карта решений
 
-| # | Legacy problem | New design |
+| № | Проблема старой версии | Новое решение |
 |---|---|---|
-| 1 | O(N) lookup | suffix-walk over compiled hash maps, O(labels) |
-| 2 | single big storage object | per-rule IndexedDB records, batched tx |
-| 3 | no hash check | FNV-1a hash, apply only on change |
-| 4 | duplicate rebuilds | single commit → one debounced rebuild |
-| 5 | rebuild on wake | O(1) verification on wake |
-| 6 | in-memory state | stateless worker |
-| 7 | popup fetch / inline JS | worker updater + alarms + ETag + last-good |
-| 8 | hot-path closures | static tables, zero-alloc hot path |
-| 9 | 291 KB popup | vanilla TS popup, tiny |
-| 10–12 | i18n/state/IDB inefficiencies | lazy, virtual list, split meta/body |
-| 13 | broad host permissions | optional, per-origin |
+| 1 | поиск за O(N) | обход суффиксов по собранным заранее хеш-таблицам, O(меток) |
+| 2 | один большой объект в хранилище | отдельные записи правил в IndexedDB (корзины), пакетные транзакции |
+| 3 | нет сравнения хеша | SHA-256, применение только при изменении |
+| 4 | дублирующие пересборки | один commit → одна пересборка с debounce |
+| 5 | пересборка при пробуждении | проверка за O(1) при пробуждении |
+| 6 | состояние в памяти | воркер без состояния |
+| 7 | загрузка в popup / вставка JS | загрузчик в воркере + alarms + ETag + последняя рабочая версия |
+| 8 | замыкания на горячем пути | статические таблицы |
+| 9 | popup 291 КБ | popup на чистом TS, крошечный |
+| 10–12 | i18n, состояние и IDB неэффективны | ленивый перевод, виртуальный список, метаданные и тексты раздельно |
+| 13 | широкие host-разрешения | необязательные, по origin |
 
-## Measured in real Chromium (popup cold open, legacy v1.1.2)
+## Замер в настоящем Chromium (холодное открытие popup старой версии, v1.1.2)
 
-`LEGACY_DIR=<clone> node benchmarks/browser.mjs` loads the legacy build as an unpacked extension (headless Chromium,
-this sandbox) and measures `navigation start → Exceptions tab input visible`, median of 5, with N domain exceptions in
-`chrome.storage.local`:
+`LEGACY_DIR=<клон> node benchmarks/browser.mjs` загружает сборку старой версии как распакованное расширение (headless Chromium,
+эта песочница) и измеряет `начало навигации → поле ввода на вкладке Exceptions видно`, медиана 5 запусков, при N исключений
+доменов в `chrome.storage.local`:
 
-| exceptions in storage | cold open to usable UI |
+| исключений в хранилище | холодное открытие до пригодного интерфейса |
 |----------------------:|-----------------------:|
-| 0                     | 89 ms                  |
-| 1 000                 | 98 ms                  |
-| 10 000                | 111 ms                 |
-| 50 000                | **271 ms**             |
+| 0                     | 89 мс                  |
+| 1 000                 | 98 мс                  |
+| 10 000                | 111 мс                 |
+| 50 000                | **271 мс**             |
 
-The growth comes from findings #2/#11 (whole-object read + two `Object.keys().filter().join()` passes + two controlled
-textareas filled with every domain). New popup on the same machine: 45–58 ms at every size (see `docs/PERFORMANCE.md`;
-the new popup defers rule loading until the Rules tab is opened, so its home screen does not depend on N at all).
+Рост объясняется находками №2 и №11 (чтение всего объекта + два прохода `Object.keys().filter().join()` + два управляемых textarea, заполняемых каждым доменом).
+Новый popup на той же машине: 45–58 мс при любом размере (см. `docs/PERFORMANCE.md`; новый popup откладывает загрузку правил
+до открытия вкладки Rules, так что его главный экран от N вообще не зависит).
 
-Caveat: headless Chromium in a container, one machine. Compare the ratios, not the absolute numbers.
+Оговорка: headless Chromium в контейнере, одна машина. Сравнивайте отношения, а не абсолютные значения.

@@ -1,0 +1,7 @@
+{
+  "appName": { "message": "PAC Proxy Manager" },
+  "appDescription": {
+    "message": "Fast PAC / proxy manager: domain rules, multiple PAC sources, failover chains. No tracking, no remote code."
+  },
+  "actionTitle": { "message": "PAC Proxy Manager" }
+}

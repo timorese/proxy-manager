@@ -1,175 +1,185 @@
-# Architecture
+# Архитектура
 
-Goal: Chrome does the routing (`chrome.proxy` + PAC); the extension only *compiles configuration into a PAC and
-applies it when, and only when, it changed*. Everything else is about not doing work.
+Цель: маршрутизацию делает Chrome (`chrome.proxy` + PAC), а расширение только *собирает настройки в PAC и применяет его
+тогда и только тогда, когда они изменились*. Всё остальное — это работа, которую мы стараемся не выполнять.
 
 ```
-                 ┌──────────────────────────── popup (vanilla TS, lives ~seconds) ─────────────────────────────┐
- user edit ────▶ │ view ─▶ repository ─▶ IndexedDB (rules, PAC meta+bodies) / chrome.storage.local (settings…)   │
-                 │                                   └────────────▶ rev = new UUID  (1 tiny write)              │
+                 ┌──────────────────────────── popup (чистый TS, живёт секунды) ───────────────────────────────┐
+ правка ───────▶ │ вид ─▶ репозиторий ─▶ IndexedDB (правила, метаданные и тексты PAC) / chrome.storage.local    │
+                 │                                   └────────────▶ rev = новый UUID  (одна крошечная запись)   │
                  └───────────────────────────────────────────────────────┬──────────────────────────────────────┘
-                                                                          │ storage.onChanged (wakes the worker)
-                 ┌───────────────────────── service worker (stateless, event driven) ──────────────────────────┐
-                 │ debounce 250 ms ─▶ SyncEngine.sync()                                                         │
-                 │   rev == state.appliedRev ? ── yes ─▶ stop (2 storage reads, nothing else)                   │
-                 │   read config ─▶ normalize() ─▶ compile() ─▶ SHA-256 ─▶ hash == appliedHash ? ─ yes ─▶ stop  │
-                 │                                                    └ no ─▶ chrome.proxy.settings.set(PAC)    │
-                 │   write RuntimeState {appliedRev, appliedHash, errors…} to storage (survives worker death)   │
+                                                                          │ storage.onChanged (будит воркер)
+                 ┌───────────────────── service worker (без состояния, по событиям) ───────────────────────────┐
+                 │ debounce 250 мс ─▶ SyncEngine.sync()                                                         │
+                 │   rev == state.appliedRev ? ── да ─▶ стоп (2 чтения хранилища, больше ничего)               │
+                 │   читаем настройки ─▶ normalize() ─▶ compile() ─▶ SHA-256 ─▶ хеш == appliedHash ? ─ да ─▶ стоп │
+                 │                                                    └ нет ─▶ chrome.proxy.settings.set(PAC)   │
+                 │   пишем RuntimeState {appliedRev, appliedHash, errors…} в хранилище (переживает смерть воркера) │
                  └──────────────────────────────────────────────────────────────────────────────────────────────┘
- Chrome ── per request ──▶ FindProxyForURL()  (O(labels in host), independent of rule count)
+ Chrome ── на каждый запрос ──▶ FindProxyForURL()  (O(числа меток в хосте), не зависит от числа правил)
 ```
 
-## Source layout
+## Структура исходников
 
-| dir | responsibility | depends on |
+| папка | ответственность | зависит от |
 |---|---|---|
-| `src/types` | data model (`Rule`, `ProxyServer`, `PacSource`, `Settings`, `RuntimeState`) | – |
-| `src/domain-rules` | pattern normalisation, reference matcher, import/export text format | types |
-| `src/pac` | `normalize()` → `compile()` (PacCompiler), static PAC-source validator | domain-rules, proxy/serialize |
-| `src/proxy` | proxy validation/serialisation, `chrome.proxy` wrapper (`ProxyApi`, injectable) | – |
-| `src/storage` | repository **interfaces** + IndexedDB / `chrome.storage` implementations, schema migrations | types |
-| `src/background` | service worker: `SyncEngine`, remote-PAC `updater`, listeners | pac, proxy, storage |
-| `src/popup` | UI | storage (via repositories), shared |
-| `src/migration` | importer for the legacy extension's data; nothing in core imports it | types, proxy, domain-rules |
-| `src/shared` | hashing, ids, message types, diagnostics | – |
+| `src/types` | модель данных (`Rule`, `ProxyServer`, `PacSource`, `Settings`, `RuntimeState`) | – |
+| `src/domain-rules` | нормализация шаблонов, эталонный matcher, текстовый формат импорта и экспорта | types |
+| `src/pac` | `normalize()` → `compile()` (PacCompiler), статический валидатор PAC-источников | domain-rules, proxy/serialize |
+| `src/proxy` | проверка и сериализация прокси, обёртка над `chrome.proxy` (`ProxyApi`, подменяемая в тестах) | – |
+| `src/storage` | **интерфейсы** репозиториев + реализации на IndexedDB и `chrome.storage`, миграции схемы | types |
+| `src/background` | service worker: `SyncEngine`, обновление удалённых PAC (`updater`), обработчики событий | pac, proxy, storage |
+| `src/popup` | интерфейс | storage (через репозитории), shared |
+| `src/migration` | импорт данных старой версии; ядро его не импортирует | types, proxy, domain-rules |
+| `src/shared` | хеширование, идентификаторы, типы сообщений, диагностика | – |
 
-The PAC compiler is a pure function of plain data: no `chrome.*`, no storage, no DOM. It runs unchanged in Node
-(tests, benchmarks) and in the worker. The popup never compiles PAC and never calls `chrome.proxy`.
+Компилятор PAC — чистая функция от простых данных: без `chrome.*`, без хранилища, без DOM. Он без изменений работает
+в Node (тесты, замеры) и в воркере. Popup никогда не собирает PAC и никогда не вызывает `chrome.proxy`.
 
-## Decision: Vanilla TypeScript, not Preact
+## Решение: чистый TypeScript, а не Preact
 
-| | React 18 stack (legacy) | Preact | Vanilla TS (chosen) |
+| | стек React 18 (старая версия) | Preact | Чистый TS (выбран) |
 |---|---|---|---|
-| popup JS (min / gzip) | 291 KB / 87 KB | ~12 KB core + our code ≈ 25 KB / 10 KB (estimate, not built) | **16 KB / 6.5 KB eager** (+ 19.5 KB lazy tabs) |
-| per-update cost | vdom diff of whole subtree | vdom diff | direct DOM writes to the nodes a view owns |
+| JS popup (min / gzip) | 291 КБ / 87 КБ | около 12 КБ ядро + наш код ≈ 25 КБ / 10 КБ (оценка, не собиралось) | **21 КБ / 8,3 КБ сразу** (+ 31 КБ вкладки по требованию, в том числе русский словарь) |
+| цена обновления | сравнение виртуального DOM всего поддерева | сравнение виртуального DOM | прямые записи в те узлы, которыми владеет вид |
 
-The UI is four small screens. The only non-trivial UI problem is the rules table, and there the framework does not
-help: it needs a **recycled row pool** (fixed row height, `transform: translateY`) regardless of framework, so the
-diffing layer would only be overhead. State is "what lives in `chrome.storage.local`" (a handful of small objects) plus
-view-local arrays; views subscribe to *which key changed* (`settings` / `proxies` / `state`) and touch only their own DOM.
-Result measured in Chromium: 45–58 ms cold open, 200 DOM elements at 50 000 rules. Preact numbers above are an estimate
-(I did not build a Preact variant); the decision rests on "there is nothing for a vdom to do here", not on that estimate.
+Интерфейс — четыре небольших экрана. Единственная нетривиальная задача — таблица правил, а здесь фреймворк не помогает:
+в любом случае нужен **пул переиспользуемых строк** (фиксированная высота, `transform: translateY`), так что слой сравнения
+был бы лишь накладным расходом. Состояние — это «то, что лежит в `chrome.storage.local`» (несколько небольших объектов)
+плюс массивы внутри видов. Виды подписываются на то, *какой ключ изменился* (`settings` / `proxies` / `state`), и трогают
+только свой DOM. Результат в Chromium: холодное открытие 45–58 мс, 200 элементов DOM при 50 000 правил. Цифры Preact выше — оценка
+(вариант на Preact я не собирал); решение держится на том, что «виртуальному DOM здесь нечего делать», а не на этой оценке.
 
-First paint: `popup.html` contains the static shell (header, tabs, switch, skeleton). `popup.css` is one render-blocking
-7 KB file; `theme-boot.js` (150 B) sets the cached theme before paint; the module script then does **one**
-`chrome.storage.local.get` and renders Home. IndexedDB is not opened until a tab needs it; Rules / PAC / Settings are
-separate lazily imported chunks.
+Первая отрисовка: `popup.html` содержит статическую оболочку (шапка, вкладки, переключатель, заглушка). `popup.css` — один
+блокирующий отрисовку файл на 7 КБ. `theme-boot.js` (150 Б) ставит сохранённую тему до отрисовки, `lang-boot.js` подписывает
+вкладки на нужном языке. Затем модульный скрипт делает **одно** чтение `chrome.storage.local` и рисует «Главную».
+IndexedDB не открывается, пока вкладка в нём не нуждается. «Правила», PAC и «Настройки» — отдельные лениво загружаемые фрагменты.
 
-## Decision: where data lives
+## Решение: где хранятся данные
 
-| data | store | why |
+| данные | хранилище | почему |
 |---|---|---|
-| settings, proxies, revision, runtime state | `chrome.storage.local` | tiny, read in one call, and `storage.onChanged` is the worker's wake-up signal |
-| rules | IndexedDB, **256 buckets** of ~N/256 rules | see below |
-| PAC source metadata and bodies | IndexedDB, separate stores | toggling a source rewrites metadata only, never the body; `list()` never loads MBs of script text |
+| настройки, прокси, ревизия, состояние выполнения | `chrome.storage.local` | мало данных, читается одним вызовом, а `storage.onChanged` будит воркер |
+| правила | IndexedDB, **256 корзин** по ~N/256 правил | см. ниже |
+| метаданные и тексты PAC-источников | IndexedDB, отдельные хранилища | переключение источника переписывает только метаданные, но не текст; `list()` никогда не загружает мегабайты скриптов |
 
-Rejected: one `chrome.storage.local` key with all rules (legacy: every edit clones/writes/diffs the whole map, and
-`onChanged` ships old+new copies to every listener). Rejected: one IndexedDB record per rule. Measured in real Chromium
-(`benchmarks/idb-layout.mjs`, 50 000 rules):
+Отвергнуто: один ключ `chrome.storage.local` со всеми правилами (старая версия: каждая правка клонирует, пишет и сравнивает весь
+словарь, а `onChanged` рассылает старую и новую копии каждому слушателю). Отвергнуто: одна запись IndexedDB на правило.
+Замеры в настоящем Chromium (`benchmarks/idb-layout.mjs`, 50 000 правил):
 
-| layout | writes (sync main-thread part / total) | read |
+| схема | запись (синхронная часть в главном потоке / всего) | чтение |
 |---|---|---|
-| 1 record per rule | 855 ms / 3 406 ms | 332 ms |
-| **256 buckets of arrays (shipped)** | **57 ms / 72 ms** | **83 ms** |
-| 256 buckets of text lines | 27 ms / 77 ms | 21 ms |
+| 1 запись на правило | 855 мс / 3 406 мс | 332 мс |
+| **256 корзин с массивами (выбрано)** | **57 мс / 72 мс** | **83 мс** |
+| 256 корзин с текстовыми строками | 27 мс / 77 мс | 21 мс |
 
-Per-record `put()` is dominated by per-request overhead, so "one transaction" alone does not make an import cheap; bucketing
-does. Text buckets read faster but need a codec and the gain (~60 ms at 50k) did not justify it. A single-rule edit
-rewrites one ~200-rule bucket. `bucketOf` (FNV-1a mod 256) is part of the on-disk format and is pinned by a test.
+Стоимость `put()` на запись складывается из накладных расходов на каждый запрос, поэтому одной «транзакции» недостаточно, чтобы
+импорт стал дешёвым; дешёвым его делает разбиение на корзины. Текстовые корзины читаются быстрее, но требуют кодека, а выигрыш
+(около 60 мс при 50 тыс.) того не стоит. Правка одного правила переписывает одну корзину примерно на 200 правил.
+`bucketOf` (FNV-1a по модулю 256) — часть формата на диске, зафиксирован тестом.
 
-## Service worker contract
+## Правила для service worker
 
-- All listeners registered synchronously at top level (`background/index.ts`): `onInstalled`, `onStartup`,
-  `storage.onChanged` (only `rev`), `alarms.onAlarm`, `proxy.onProxyError`, `runtime.onMessage`.
-- No `setInterval`, no polling, no DOM, no UI code. The only timer is the 250 ms debounce after a revision change.
-- No state is trusted across restarts. `SyncEngine` is recreated lazily; `appliedRev`/`appliedHash`/errors are persisted.
-  A test builds a second engine on the same storage and asserts it does not re-apply.
-- Startup: `verify()` = one `proxy.settings.get`; re-applies only if Chrome says we lost control while enabled.
-- `onProxyError` can fire per request, so the handler drops events within 5 s of the last one before touching storage
-  and deduplicates identical messages. It is the one listener that can wake an idle worker repeatedly; it is the price of
-  surfacing "Proxy error" to the user.
-- Concurrent `sync()` calls coalesce (one in flight + one queued).
+- Все обработчики регистрируются синхронно на верхнем уровне (`background/index.ts`): `onInstalled`, `onStartup`,
+  `storage.onChanged` (только `rev`), `alarms.onAlarm`, `proxy.onProxyError`, `runtime.onMessage`.
+- Никаких `setInterval`, опросов, DOM и кода интерфейса. Единственный таймер — debounce 250 мс после смены ревизии.
+- Состоянию между перезапусками не доверяем. `SyncEngine` создаётся лениво заново; `appliedRev` / `appliedHash` / ошибки хранятся
+  в хранилище. Тест строит второй движок на том же хранилище и проверяет, что он не применяет настройки повторно.
+- Запуск браузера: `verify()` = один вызов `proxy.settings.get`; повторное применение только если Chrome сообщает, что мы потеряли
+  управление при включённом расширении.
+- `onProxyError` может срабатывать на каждый запрос, поэтому обработчик отбрасывает события в течение 5 с после последнего, прежде чем
+  трогать хранилище, и убирает одинаковые сообщения. Это единственный обработчик, который может многократно будить простаивающий воркер;
+  это цена за показ «Proxy error» пользователю.
+- Параллельные вызовы `sync()` объединяются (один выполняется + один в очереди).
 
-## When PAC is (not) rebuilt or applied
+## Когда PAC (не) пересобирается и (не) применяется
 
-1. **Revision check** – every config write ends by writing a new random `rev`. If `rev === state.appliedRev` the worker
-   returns after two storage reads.
-2. **Hash check** – otherwise it compiles and compares SHA-256(PAC) with `appliedHash`. Same hash ⇒ `settings.set` is *not*
-   called, only `appliedRev` is advanced. Verified in real Chrome: adding a rule that the compiler eliminates as redundant
-   produces a new revision and zero `settings.set` calls.
-3. Compile-time elimination makes (2) hit more often: duplicate rules, rules equal to what their parent wildcard or the
-   default mode already yields, and `PROXY`/`PAC` actions with nothing behind them are dropped.
-4. Toggle ON/OFF and explicit buttons skip the debounce: the popup sends `{t:'sync'}` and gets the result back.
-   Ordinary edits send no message at all.
-5. A failed `settings.set` does **not** advance `appliedRev`, so the next sync retries.
+1. **Проверка ревизии.** Каждая запись настроек заканчивается записью нового случайного `rev`. Если `rev === state.appliedRev`,
+   воркер возвращается после двух чтений хранилища.
+2. **Проверка хеша.** Иначе он собирает PAC и сравнивает SHA-256(PAC) с `appliedHash`. Хеш совпал ⇒ `settings.set` **не**
+   вызывается, меняется только `appliedRev`. Проверено в настоящем Chrome: добавление правила, которое компилятор отбрасывает как лишнее,
+   даёт новую ревизию и ноль вызовов `settings.set`.
+3. Отбрасывание при сборке заставляет п. 2 срабатывать чаще: дубликаты, правила, равные тому, что и так даёт родительская маска
+   или режим по умолчанию, и действия `PROXY` / `PAC`, за которыми ничего нет.
+4. Переключатель ВКЛ/ВЫКЛ и явные кнопки обходят debounce: popup отправляет `{t:'sync'}` и получает результат. Обычные правки
+   сообщений не отправляют вовсе.
+5. Неудачный `settings.set` **не** двигает `appliedRev`, так что следующая синхронизация повторяет попытку.
 
-## PAC compiler
+## Компилятор PAC
 
-Input is normalised (`normalize()`), then `compile()` emits ES5 text:
+Вход нормализуется (`normalize()`), затем `compile()` выдаёт текст на ES5:
 
 ```js
-var D="DIRECT",P="SOCKS5 1.2.3.4:1080; DIRECT";          // chains precomputed at compile time
-var E=Object.create(null),W=Object.create(null);          // exact table, wildcard table
+var D="DIRECT",P="SOCKS5 1.2.3.4:1080; DIRECT";          // цепочки считаются при сборке
+var E=Object.create(null),W=Object.create(null);          // таблица точных доменов, таблица масок
 function L(s,a,t){for(var i=0,l=s.split(" ");i<l.length;i++)t[l[i]]=a}
-L("a.com b.com",1,E);L("c.org",2,E);L("x.net",1,W);       // domains packed per action; sorted => stable hash
+L("a.com b.com",1,E);L("c.org",2,E);L("x.net",1,W);       // домены упакованы по действиям; сортировка => стабильный хеш
 function FindProxyForURL(u,h){
   if(h.charCodeAt(h.length-1)===46)h=h.slice(0,-1);
   var a=E[h];
   if(!a){var s=h,i;for(;;){a=W[s];if(a||(i=s.indexOf("."))<0)break;s=s.slice(i+1)}}
   if(a===1)return D;if(a===2)return P;
-  if(h.indexOf(".")<0)return D;                            // bypassLocal, emitted only when relevant
+  if(h.indexOf(".")<0)return D;                            // bypassLocal, выдаётся только когда нужен
   return P}
 ```
 
-- **Priority** (also the reference `matcher.ts`, cross-checked against the PAC by a 20 000-lookup randomised test):
-  exact host → most specific `*.parent` (a wildcard also matches its own base domain) → default mode.
-  `example.com = PAC`, `*.google.com = PROXY`, `mail.google.com = DIRECT` behaves as in the task description (tested).
-- **Hot path**: one property lookup for exact, then one per label for the suffix walk; no regex, no closures, no
-  `Array.find/filter/map`, one `slice` per label (V8 sliced strings). Tables are built once at PAC load from packed
-  strings (50k rules: 5.8 ms load).
-- **Why not a trie**: measured (`npm run benchmark`, 10k rules): reversed-label trie 740–800 ns/lookup (needs `split`);
-  object + suffix walk 50–540 ns; `Map` + suffix walk 80–270 ns. `Map` is ~2× faster than the object on misses
-  but the absolute gain (~0.3 µs) is irrelevant next to per-request work and would drop ES5 compatibility; I kept
-  null-prototype objects (also immune to host names like `constructor` / `__proto__`, tested).
-- **Size**: ~16 bytes per *compiled* rule (domains are packed into space-separated strings, no quotes/colons). 50k generated
-  rules (30k survive elimination) → 489 KB; 10k → 96 KB. The legacy encoding of 50k exceptions was 1.55 MB (10k: 302 KB).
-  The two datasets are different generators, so treat this as order-of-magnitude, not an exact ratio.
+- **Приоритет** (он же эталонный `matcher.ts`, сверен с PAC рандомизированным тестом на 20 000 запросов):
+  точный хост → самая конкретная `*.родитель` (маска совпадает и со своим базовым доменом) → режим по умолчанию.
+  Пример `example.com = PAC`, `*.google.com = PROXY`, `mail.google.com = DIRECT` ведёт себя как в постановке задачи (проверено тестом).
+- **Горячий путь:** одно обращение к свойству для точного совпадения и по одному на каждую метку при обходе суффиксов; без регулярных
+  выражений, замыканий и `Array.find/filter/map`, один `slice` на метку (срезанные строки V8). Таблицы строятся один раз при загрузке PAC
+  из упакованных строк (50 тыс. правил: загрузка 5,8 мс).
+- **Почему не trie:** замерено (`npm run benchmark`, 10 тыс. правил): trie по меткам в обратном порядке 740–800 нс на запрос (нужен `split`);
+  объект + обход суффиксов 50–540 нс; `Map` + обход суффиксов 80–270 нс. `Map` примерно вдвое быстрее объекта на промахах, но абсолютный
+  выигрыш (около 0,3 мкс) ничтожен на фоне работы на запрос и потерял бы совместимость с ES5. Оставлены объекты без прототипа
+  (они же защищены от хостов вроде `constructor` / `__proto__`, проверено тестом).
+- **Размер:** около 16 байт на *скомпилированное* правило (домены упакованы в строки через пробел, без кавычек и двоеточий). 50 тыс.
+  сгенерированных правил (30 тыс. переживают отбрасывание) → 489 КБ; 10 тыс. → 96 КБ. Старая версия кодировала 50 тыс. исключений в 1,55 МБ
+  (10 тыс.: 302 КБ). Наборы данных получены разными генераторами, поэтому это порядок величины, а не точное отношение.
 
-### Combining PAC sources (security model)
+### Объединение PAC-источников (модель безопасности)
 
-Remote PAC text is **data**, never extension code: no `eval`, no `new Function`, no remote modules. The extension fetches
-it (worker, `fetch`), statically sanity-checks it (`validatePacSource`: not HTML, not empty, brackets/strings/comments
-balanced, defines `FindProxyForURL`), stores it, and embeds it as text into the PAC string handed to `chrome.proxy`.
-That PAC is executed by Chrome's PAC interpreter, outside the extension context — the same trust model as pointing
-Chrome at a PAC URL, and the reason MV3's "no remotely hosted code" rule does not apply to it.
+Текст удалённого PAC — это **данные**, а не код расширения: никаких `eval`, `new Function` и удалённых модулей. Расширение скачивает его
+(воркер, `fetch`), статически проверяет на здравый смысл (`validatePacSource`: не HTML, не пустой, скобки, строки и комментарии
+сбалансированы, определяет `FindProxyForURL`), сохраняет и вставляет как текст в строку PAC, которую получает `chrome.proxy`.
+Этот PAC исполняет интерпретатор PAC в Chrome, вне контекста расширения. Это та же модель доверия, как если указать Chrome URL PAC,
+и поэтому правило MV3 «никакого удалённо размещённого кода» к нему не относится.
 
-Each source is wrapped in its own function scope (`function X0(){ <source>; return FindProxyForURL }`), so sources
-cannot clobber each other's globals or ours (tested), and a source that throws at load or at call time is skipped.
-Combination rule: for the `PAC` action (and for the default in `PAC` mode) sources are asked in the listed order and the
-first answer that is not `DIRECT` wins; if none, `DIRECT`. With *Use my proxy servers instead of the PAC's own* enabled (and at least one proxy enabled) the combined PAC answers with the user's proxy chain whenever a source answers with anything other than `DIRECT` (legacy "override PAC"). A source that fails validation is excluded from the build and
-reported (`PAC compilation failed`), it never breaks the rest. The validator is lexical, not a JS parser: a script that
-passes can still contain a semantic error; Chrome then reports it via `onProxyError` (`Proxy error` in the popup) and
-`mandatory:false` makes Chrome fall back to DIRECT instead of blocking traffic.
+Каждый источник оборачивается в собственную область видимости функции (`function X0(){ <источник>; return FindProxyForURL }`), так что
+источники не портят глобальные переменные друг друга и наши (проверено тестом), а источник, который падает при загрузке или вызове, пропускается.
+Правило объединения: для действия `PAC` (и для режима по умолчанию в режиме `PAC`) источники опрашиваются в указанном порядке, и побеждает
+первый ответ, не равный `DIRECT`; если таких нет — `DIRECT`. При включённой опции *«Использовать мои прокси вместо прокси из PAC»*
+(и хотя бы одном включённом прокси) собранный PAC отвечает цепочкой прокси пользователя всякий раз, когда источник ответил чем-либо кроме
+`DIRECT` (это «override PAC» старой версии). Источник, не прошедший проверку, исключается из сборки и
+сообщается как `PAC compilation failed`, остальные он не ломает. Валидатор лексический, а не разбор JS: скрипт, прошедший проверку,
+всё ещё может содержать смысловую ошибку; тогда Chrome сообщит о ней через `onProxyError` («Proxy error» в popup), а `mandatory:false`
+заставит Chrome идти напрямую вместо блокировки трафика.
 
-### Remote refresh
+### Удалённое обновление
 
-`chrome.alarms` (one alarm at the shortest configured interval, none when nothing refreshes) → `refreshSources()`.
-`If-None-Match` / `If-Modified-Since` when a good copy exists, 15 s timeout via `AbortController`, 1 MB cap,
-validation before replacing. 304, or 200 with an identical hash, only updates metadata (no revision bump, no rebuild).
-Any failure only writes `error`/`lastAttemptAt`; the last good body keeps being used.
+`chrome.alarms` (один будильник с самым коротким заданным интервалом, ни одного, если обновлять нечего) → `refreshSources()`.
+`If-None-Match` / `If-Modified-Since`, если есть рабочая копия, таймаут 15 с через `AbortController`, лимит 1 МБ, проверка перед заменой.
+Ответ 304 или 200 с тем же хешем обновляет только метаданные (ревизия не меняется, пересборки нет). Любая неудача пишет только
+`error` / `lastAttemptAt`; последняя рабочая версия продолжает использоваться.
 
-## Permissions
+## Разрешения
 
-`proxy`, `storage`, `alarms`, `activeTab`. `activeTab` exists only so the popup can read the address of the tab it was opened on ("Current site" card); it grants nothing until the user opens the popup and shows no install warning. The card resolves the route by reading only the rule buckets that can match that host (`RuleRepository.getMany`), not the whole list. No `host_permissions`, no `tabs`, no `webRequest`. Remote PAC fetches use
-`optional_host_permissions` requested for the PAC server's origin only, from the click that adds the source (if the user
-declines, `fetch` still works when that server sends CORS headers). `minimum_chrome_version` is `120` (sub-minute alarms,
-`color-mix()`); I only ran it on Chromium 141 (the one bundled in this sandbox), so lower versions are not verified.
+`proxy`, `storage`, `alarms`, `activeTab`. `activeTab` нужен только для того, чтобы popup прочитал адрес вкладки, на которой он открыт
+(карточка «Current site»); пока пользователь не откроет popup, он ничего не даёт и не показывает предупреждений при установке. Карточка
+определяет маршрут, читая только те корзины правил, где может быть подходящее правило (`RuleRepository.getMany`), а не весь список.
+Нет `host_permissions`, `tabs`, `webRequest`. Загрузка удалённых PAC использует `optional_host_permissions`, запрашиваемые только для origin
+PAC-сервера по нажатию, которое добавляет источник (если пользователь отказал, `fetch` всё равно работает, когда сервер отдаёт CORS-заголовки).
+`minimum_chrome_version` равен `120` (будильники с интервалом меньше минуты, `color-mix()`); запускалось только в Chromium 141
+(он есть в этой песочнице), на более старых версиях не проверялось.
 
-## Known limits / non-goals
+## Известные ограничения и то, что не делалось
 
-- UI languages: English and Russian (`src/popup/i18n.ts`: the English text is the key, `ru.ts` is loaded lazily, `tests/i18n.test.ts` guards completeness). The extension name/description in the manifest and error details produced by the worker (e.g. `Corp: HTTP 503`) stay English. Legacy shipped 13 locales.
-- IPv6 literals are valid for proxy hosts but not for rules.
-- Only `scope: 'regular'` (not incognito).
-- No per-tab or URL-path rules: PAC receives the full URL, but domain rules are the requested scope.
-- The ~1 MB PAC limit I recall for Chrome's PAC fetcher was **not verified**; a 284 KB generated PAC was accepted and
-  executed correctly in Chromium (see `docs/PERFORMANCE.md`). The popup shows the applied PAC size in diagnostics.
+- Языки интерфейса: английский и русский (`src/popup/i18n.ts`: ключ — английский текст, `ru.ts` загружается лениво, `tests/i18n.test.ts`
+  следит за полнотой). Название и описание расширения локализованы через `_locales` (en, ru). Детали ошибок воркера (например,
+  `Corp: HTTP 503`) остаются на английском. Старая версия поставлялась с 13 локалями.
+- IPv6-адреса допустимы для хостов прокси, но не для правил.
+- Только `scope: 'regular'` (не режим инкогнито).
+- Нет правил по вкладкам и путям URL: PAC получает полный URL, но запрошенная область — правила по доменам.
+- Лимит около 1 МБ на PAC, который я помню для загрузчика PAC в Chrome, **не проверялся**. Реально принятые и корректно
+  выполненные в Chromium PAC: сгенерированный на 568 КБ (50 тыс. импортированных правил) и настоящий antizapret-PAC на 714 КБ
+  (см. `docs/PERFORMANCE.md`). Размер применённого PAC попадает в диагностику.

@@ -1,65 +1,86 @@
-# PAC Proxy Manager (next generation)
+# PAC Proxy Manager (новое поколение)
 
-A Manifest V3 Chrome/Chromium extension for managing proxies, PAC scripts and per-domain rules. Chrome does the routing
-(`chrome.proxy` + a compiled PAC); the extension only compiles configuration into PAC and applies it when it actually changed.
+Расширение для Chrome/Chromium на Manifest V3: управление прокси, PAC-скриптами и правилами по доменам.
+Маршрутизацию делает сам Chrome (`chrome.proxy` + собранный PAC). Расширение только превращает настройки в PAC
+и применяет его, когда настройки действительно изменились.
 
-Functional reference: [ilyachase/pac-proxy-manager-extension](https://github.com/ilyachase/pac-proxy-manager-extension).
-This is a from-scratch rewrite, not a fork — see [`docs/PERFORMANCE_AUDIT.md`](docs/PERFORMANCE_AUDIT.md) for why.
+Функциональный ориентир — [ilyachase/pac-proxy-manager-extension](https://github.com/ilyachase/pac-proxy-manager-extension).
+Это переписанный с нуля проект, а не форк. Почему так, объясняет [`docs/PERFORMANCE_AUDIT.md`](docs/PERFORMANCE_AUDIT.md).
 
-## Features
+## Возможности
 
-- Default mode for unlisted sites: **Direct** (rules opt sites into the proxy), **Proxy**, or **PAC**; master ON/OFF.
-- Proxies: HTTP, HTTPS, SOCKS4, SOCKS5; several in failover order → `SOCKS5 a:1080; SOCKS5 b:1080; DIRECT`.
-- Rules: `example.com` (exact), `*.example.com` (base + all subdomains) → `DIRECT` / `PROXY` / `PAC`.
-  Priority: exact → most specific wildcard → default mode. Search, sort, bulk enable/disable/delete/set-action, "test a host",
-  text import/export (`example.com`, `example.com DIRECT`, `#off …` for disabled), 50 000 rules without lag.
-- PAC sources: remote URL (conditional requests, timeout, periodic refresh via `chrome.alarms`, last-good fallback) or
-  inline script; several, each enable/disable-able, combined safely (see ARCHITECTURE.md). Optional "use my proxy servers instead of the PAC's own" for generic lists that hard-code a proxy address (e.g. antizapret's `127.0.0.1:1080`).
-- Errors shown in the popup: PAC fetch failed · PAC compilation failed · Proxy config rejected · Invalid proxy ·
-  Invalid domain rule · controlled by another extension. **Export diagnostics** contains no domains, hosts or URL paths.
-- English and Russian UI (Settings → Language; follows the browser language by default). The Russian dictionary is a separate lazy chunk that English users never load; a test fails if any string lacks a translation.
-- Import accepts lists like `*.example.com` / `example.com` / IPs one per line (also pasted markdown links), with a default action.
-- Light/dark theme, import from 1.x ([MIGRATION.md](MIGRATION.md)).
-- Current site card on the Proxy tab: shows which route applies to the open site (DIRECT / PROXY / PAC and the rule or default that decided it) and adds it to the list in one click (`*.site`, with or without subdomains).
-- Privacy: permissions are `proxy`, `storage`, `alarms`, `activeTab` (the open tab's address is read only when you open the popup; no history); no `webRequest`, no host permissions (optional per-origin
-  permission for the PAC server you add), no analytics, no `eval`, no remote code, zero runtime dependencies.
+- Режим по умолчанию для сайтов вне списка: **Direct** (через прокси идут только сайты из правил), **Proxy** или **PAC**.
+  Главный переключатель ВКЛ/ВЫКЛ.
+- Прокси: HTTP, HTTPS, SOCKS4, SOCKS5. Можно несколько, в порядке переключения при отказе:
+  `SOCKS5 a:1080; SOCKS5 b:1080; DIRECT`.
+- Правила: `example.com` (точное совпадение), `*.example.com` (сам домен и все поддомены) → `DIRECT` / `PROXY` / `PAC`.
+  Приоритет: точное правило → самая конкретная маска → режим по умолчанию. Поиск, сортировка, массовое
+  включение/выключение/удаление/смена действия, проверка хоста, импорт и экспорт текстом. 50 000 правил работают без задержек.
+- Карточка **Current site** на вкладке Proxy: показывает, какое правило сейчас действует для открытого сайта
+  (DIRECT / PROXY / PAC и что именно это решило: правило или режим по умолчанию), и добавляет сайт в список одним нажатием
+  (`*.site`, с поддоменами или без).
+- PAC-источники: удалённый URL (условные запросы, таймаут, периодическое обновление через `chrome.alarms`, откат на
+  последнюю рабочую версию) или встроенный скрипт. Можно несколько, каждый включается и выключается отдельно
+  и объединяется безопасно (см. ARCHITECTURE.md). Есть опция «использовать мои прокси вместо прокси из PAC» —
+  для общих списков, где прописан адрес вроде `127.0.0.1:1080` (например, antizapret).
+- Ошибки видны в popup: PAC fetch failed · PAC compilation failed · Proxy config rejected · Invalid proxy ·
+  Invalid domain rule · прокси управляется другим расширением. **Export diagnostics** не содержит доменов,
+  адресов серверов и путей URL.
+- Интерфейс на английском и русском (Settings → Language; по умолчанию язык браузера). Русский словарь — отдельный
+  фрагмент, который англоязычные пользователи не загружают; тест падает, если какой-то строке не хватает перевода.
+- Импорт списков вида `*.example.com` / `example.com` / IP по одному в строке (в том числе вставленные markdown-ссылки)
+  с действием по умолчанию.
+- Светлая и тёмная тема, перенос данных из версии 1.x ([MIGRATION.md](MIGRATION.md)).
+- Приватность: разрешения только `proxy`, `storage`, `alarms`, `activeTab` (адрес открытой вкладки читается только когда
+  вы открываете popup, истории нет). Нет `webRequest`, нет host-разрешений (для PAC-сервера, который вы добавляете, запрашивается
+  необязательное разрешение на его origin), нет аналитики, нет `eval`, нет удалённого кода, ноль runtime-зависимостей.
 
-## Develop
+## Установка
+
+### Из релиза на GitHub
+
+1. Скачайте `pac-proxy-manager-<версия>.zip` со страницы *Releases* и распакуйте в папку, которую не будете удалять.
+2. `chrome://extensions` → включите *Режим разработчика* → *Загрузить распакованное расширение* → выберите эту папку.
+
+Для сопровождающих: опубликуйте релиз в интерфейсе GitHub, и `.github/workflows/release.yml` прогонит lint и тесты,
+соберёт проект и приложит zip. Для уже существующего релиза: Actions → Release → Run workflow → введите его тег.
+
+### Из исходников
 
 ```bash
 npm install
-npm run dev          # vite build --watch (development mode, sourcemaps)
-npm run build        # production build into dist/ + bundle report
-npm test             # vitest: unit + integration (config → PAC → chrome.proxy), perf regression guards
-npm run typecheck    # tsc --noEmit (strict)
-npm run lint         # biome
-npm run benchmark    # pipeline benchmarks + regression thresholds (Node)
-npm run benchmark:browser   # real-Chromium e2e + popup benchmark (needs Playwright + Chromium)
-LEGACY_DIR=/path/to/legacy-clone npm run benchmark:legacy   # baseline of the original PAC generator
+npm run build
 ```
 
-Load `dist/` via `chrome://extensions` → Developer mode → *Load unpacked*.
+Затем загрузите папку `dist/` через `chrome://extensions` → Режим разработчика → *Загрузить распакованное расширение*.
 
-## Docs
+## Разработка
 
-- [docs/PERFORMANCE_AUDIT.md](docs/PERFORMANCE_AUDIT.md) – what was slow in 1.x, measured, and how it is fixed
-- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) – layers, framework decision, storage, worker contract, PAC compiler, security model
-- [docs/PERFORMANCE.md](docs/PERFORMANCE.md) – all measurements (Node + real Chromium), bundle sizes, regression guards
-- [MIGRATION.md](MIGRATION.md) – importing 1.x data
+```bash
+npm run dev          # vite build --watch (режим разработки, sourcemaps)
+npm run build        # боевая сборка в dist/ и отчёт о размере бандла
+npm test             # vitest: модульные и интеграционные тесты (настройки → PAC → chrome.proxy), защита от регрессий скорости
+npm run typecheck    # tsc --noEmit (strict)
+npm run lint         # biome
+npm run package      # сборка и упаковка dist/ в pac-proxy-manager-<версия>.zip
+npm run benchmark    # замеры конвейера и пороги регрессии (Node)
+npm run benchmark:browser   # сквозная проверка в настоящем Chromium и замеры popup (нужны Playwright и Chromium)
+LEGACY_DIR=/путь/к/клону-старой-версии npm run benchmark:legacy   # базовые замеры генератора PAC старой версии
+```
 
-## Headline numbers (this sandbox, see PERFORMANCE.md)
+## Документация
 
-| | legacy 1.1.2 | this |
+- [docs/PERFORMANCE_AUDIT.md](docs/PERFORMANCE_AUDIT.md) — что тормозило в 1.x, с замерами, и как это устранено
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — слои, выбор фреймворка, хранилище, правила для service worker, компилятор PAC, модель безопасности
+- [docs/PERFORMANCE.md](docs/PERFORMANCE.md) — все замеры (Node и настоящий Chromium), размеры бандла, защита от регрессий
+- [MIGRATION.md](MIGRATION.md) — перенос данных из 1.x
+
+## Главные цифры (эта песочница, подробности в PERFORMANCE.md)
+
+| | старая 1.1.2 | эта версия |
 |---|---:|---:|
-| PAC lookup per request @ 50k rules | 12 ms | 1.3 µs |
-| PAC size @ 50k rules | 1.55 MB | ~0.5 MB |
-| popup JS (eager) | 291 KB | 16 KB |
-| popup cold open (50k rules stored) | 271 ms | 46 ms |
-| 50k-line import, longest main-thread task | not measured | 69 ms |
-
-## Install from a release
-
-1. Download `pac-proxy-manager-<version>.zip` from the GitHub *Releases* page and unzip it into a folder you will keep.
-2. `chrome://extensions` → enable *Developer mode* → *Load unpacked* → pick that folder.
-
-Maintainers: publish a release in the GitHub UI and `.github/workflows/release.yml` lints, tests, builds and attaches the zip. For an existing release: Actions → Release → Run workflow → enter its tag.
+| Поиск в PAC на один запрос при 50 тыс. правил | 12 мс | 1,3 мкс |
+| Размер PAC при 50 тыс. правил | 1,55 МБ | около 0,5 МБ |
+| JS popup (загружается сразу) | 291 КБ | 21 КБ |
+| Холодное открытие popup (в хранилище 50 тыс. правил) | 271 мс | 46 мс |
+| Импорт 50 тыс. строк, самая долгая задача главного потока | не измерялось | 69 мс |

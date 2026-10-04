@@ -1,105 +1,115 @@
-# Performance
+# Производительность
 
-All numbers: this sandbox (Linux container, Node 22.22, Chromium 141.0.7390.37 headless from `/opt/pw-browsers`),
-single run set; use them for ratios, not absolutes. Reproduce with the commands in each section.
+Все цифры получены в этой песочнице (Linux-контейнер, Node 22.22, Chromium 141.0.7390.37 в режиме headless из `/opt/pw-browsers`),
+по одному прогону; используйте их для сравнения отношений, а не абсолютных значений. Как воспроизвести — в каждом разделе.
 
-## 1. Per-request cost (what the user feels while browsing)
+## 1. Цена на каждый запрос (то, что чувствует пользователь при работе в сети)
 
-`npm run benchmark` runs the generated PAC in a Node `vm` (loop inside the context, so VM boundary crossings are excluded).
-Legacy numbers from `LEGACY_DIR=<clone> npm run benchmark:legacy`.
+`npm run benchmark` исполняет собранный PAC в `vm` из Node (цикл крутится внутри контекста, поэтому вызовы через границу VM
+не учитываются). Цифры старой версии — из `LEGACY_DIR=<клон> npm run benchmark:legacy`.
 
-| rules | legacy miss | legacy exact hit | **new miss** | **new exact** | **new wildcard** |
+| правил | старая: промах | старая: точное совпадение | **новая: промах** | **новая: точное** | **новая: маска** |
 |------:|------------:|-----------------:|-------------:|--------------:|-----------------:|
-| 100   | 5 µs        | 2 µs             | 1.3 µs       | 1.6 µs        | 1.5 µs           |
-| 1 000 | 25 µs       | 15 µs            | 1.4 µs       | 0.9 µs        | 1.4 µs           |
-| 10 000| 1 567 µs    | 426 µs           | 1.3 µs       | 1.1 µs        | 1.6 µs           |
-| 50 000| **11 998 µs** | 3 922 µs       | 1.3 µs       | 1.0 µs        | 1.7 µs           |
+| 100    | 5 мкс       | 2 мкс            | 1,3 мкс      | 1,6 мкс       | 1,5 мкс          |
+| 1 000  | 25 мкс      | 15 мкс           | 1,4 мкс      | 0,9 мкс       | 1,4 мкс          |
+| 10 000 | 1 567 мкс   | 426 мкс          | 1,3 мкс      | 1,1 мкс       | 1,6 мкс          |
+| 50 000 | **11 998 мкс** | 3 922 мкс     | 1,3 мкс      | 1,0 мкс       | 1,7 мкс          |
 
-Lookup is flat: ×0.9 from 100 → 50 000 rules (legacy: ×2 353). (The ~1 µs floor is call overhead inside `vm`.)
+Время поиска не растёт: ×0,9 при переходе от 100 к 50 000 правил (у старой версии ×2 353). Около 1 мкс — это накладные расходы
+вызова внутри `vm`.
 
-## 2. Compile pipeline (worker, only when the config actually changed)
+## 2. Конвейер сборки (воркер, только когда настройки действительно изменились)
 
-| rules  | normalize | normalize + compile | hash (SHA-256) | PAC size | gzip | PAC load | rules kept* |
+| правил | normalize | normalize + compile | хеш (SHA-256) | размер PAC | gzip | загрузка PAC | правил осталось* |
 |-------:|----------:|--------------------:|---------------:|---------:|-----:|---------:|------------:|
-| 100    | 0.3 ms    | 0.1 ms              | 0.3 ms         | 1.5 KB   | 0.8 KB | 0.5 ms | 54          |
-| 1 000  | 0.3 ms    | 1.5 ms              | 0.3 ms         | 9.9 KB   | 3.0 KB | 0.6 ms | 613         |
-| 10 000 | 3.0 ms    | 15 ms               | 0.7 ms         | 95.8 KB  | 24 KB  | 2.0 ms | 6 022       |
-| 50 000 | 20 ms     | 78 ms               | 2.8 ms         | 489 KB   | 114 KB | 5.8 ms | 29 892      |
+| 100    | 0,3 мс    | 0,1 мс              | 0,3 мс         | 1,5 КБ   | 0,8 КБ | 0,5 мс | 54          |
+| 1 000  | 0,3 мс    | 1,5 мс              | 0,3 мс         | 9,9 КБ   | 3,0 КБ | 0,6 мс | 613         |
+| 10 000 | 3,0 мс    | 15 мс               | 0,7 мс         | 95,8 КБ  | 24 КБ  | 2,0 мс | 6 022       |
+| 50 000 | 20 мс     | 78 мс               | 2,8 мс         | 489 КБ   | 114 КБ | 5,8 мс | 29 892      |
 
-\* after dedupe + redundancy elimination. Legacy generation at 50k: 17 ms but a 1.55 MB script and 12 ms/request.
-Import text parsing (Node): 0.4 / 1.8 / 14 / 80 ms for 100 / 1k / 10k / 50k lines.
-Rule search (substring scan of normalised patterns): 0.01 / 0.08 / 0.34 / 2.1 ms. Sort by domain: 0.02 / 0.4 / 4 / 28 ms.
-→ Neither a Web Worker for import/normalisation nor a prebuilt search index is justified: 50k lines parse in 80 ms
-(browser: 38–111 ms incl. UI), a keystroke filter costs ≈ 2 ms, and a 250 ms debounce is not needed on search
-(filter is coalesced per animation frame instead).
+\* после удаления дубликатов и лишних правил. Генерация в старой версии при 50 тыс.: 17 мс, но скрипт 1,55 МБ и 12 мс на запрос.
+Разбор текста импорта (Node): 0,4 / 1,8 / 14 / 80 мс для 100 / 1 тыс. / 10 тыс. / 50 тыс. строк.
+Поиск по правилам (подстрока в нормализованных шаблонах): 0,01 / 0,08 / 0,34 / 2,1 мс. Сортировка по домену: 0,02 / 0,4 / 4 / 28 мс.
+→ Ни Web Worker для импорта и нормализации, ни готовый поисковый индекс не оправданы: 50 тыс. строк разбираются за 80 мс
+(в браузере: 38–111 мс вместе с интерфейсом), фильтр на одно нажатие клавиши стоит около 2 мс, а debounce 250 мс для поиска не нужен
+(вместо него фильтр объединяется на один кадр анимации).
 
-## 3. Real Chromium (`npm run build && npm run benchmark:browser`)
+## 3. Настоящий Chromium (`npm run build && npm run benchmark:browser`)
 
-End-to-end checks, all PASS: MV3 manifest accepted; permissions exactly `proxy/storage/alarms`; a PROXY rule reaches a local
-proxy while an unlisted host stays DIRECT; a redundant rule produces a new revision and **no** `settings.set`; a real change
-produces exactly one; an edit made right after `ServiceWorker.stopAllWorkers` is applied (storage event wakes the worker;
-note: I could not independently prove that Chrome had terminated the worker in this headless run — the restart
-property is asserted by the unit test that builds a fresh `SyncEngine` over the same storage); OFF releases control;
-remote PAC source via the UI: downloaded once by the worker, one `chrome.alarms` alarm at the configured period, manual Update sends `If-None-Match` and the 304 causes no rebuild, mode PAC routes through the third-party script, and after the PAC server goes offline the error is shown (PAC tab + Home) while the last good script keeps routing (the test PAC server sends CORS headers because headless Chromium cannot answer the optional host-permission prompt, so that prompt path itself is untested);
-Chrome accepted and correctly executed a 284 KB PAC produced from 50 000 imported rules.
+Сквозные проверки, все PASS: манифест MV3 принят; разрешения ровно `proxy/storage/alarms/activeTab`; правило PROXY доходит до
+локального прокси, а сайт вне списка идёт DIRECT; лишнее правило даёт новую ревизию и **ни одного** `settings.set`; реальное изменение
+даёт ровно один; правка, сделанная сразу после `ServiceWorker.stopAllWorkers`, применяется (событие хранилища будит воркер; замечание:
+независимо доказать, что Chrome в этом headless-прогоне действительно завершил воркер, я не смог — свойство перезапуска подтверждено модульным
+тестом, который строит новый `SyncEngine` на том же хранилище); ВЫКЛ возвращает управление.
+Карточка «Current site»: показывает PROXY/DIRECT и правило, одно нажатие создаёт `*.site` (без `www`), список правил перезагружается.
+Русский интерфейс: переключение, перевод Главной и карточки, русские формы множественного числа, возврат на английский.
+Удалённый PAC-источник через интерфейс: один раз скачан воркером, один будильник `chrome.alarms` с заданным периодом, ручное «Update»
+отправляет `If-None-Match`, а ответ 304 не вызывает пересборки; режим PAC маршрутизирует по стороннему скрипту; опция «использовать мои
+прокси вместо прокси из PAC» подменяет ответ скрипта (проверено в обе стороны); после отключения PAC-сервера ошибка показана (вкладка PAC и Главная),
+а последний рабочий скрипт продолжает маршрутизировать (тестовый PAC-сервер отдаёт CORS-заголовки, потому что headless Chromium не может ответить
+на запрос необязательного host-разрешения, так что сам путь через это разрешение не проверен).
+Chrome принял и корректно выполнил PAC размером 284–568 КБ, собранный из 50 000 импортированных правил (зависит от режима по умолчанию:
+правила, равные ему, отбрасываются), а также настоящий antizapret-PAC на 714 КБ (проверено разовым запуском: файл скачан по URL,
+`youtube.com` ушёл на прокси).
 
-Popup (median of 5 cold opens, rules pre-seeded in IndexedDB):
+Popup (медиана 5 холодных открытий, правила заранее записаны в IndexedDB):
 
-| rules | cold open → usable | open Rules tab | DOM elements | 1-key search | select all + disable | longest main-thread task |
+| правил | холодное открытие → пригоден | открытие вкладки Rules | элементов DOM | поиск, 1 символ | выбрать все + отключить | самая долгая задача главного потока |
 |------:|-------------------:|---------------:|-------------:|-------------:|---------------------:|-------------------------:|
-| 0     | 45 ms              | 80 ms          | 60           | ≤ 27 ms*     | –                    | –                        |
-| 1 000 | 49 ms              | 99 ms          | 200          | 10 ms        | 19 ms                | 0                        |
-| 10 000| 52 ms              | 100 ms         | 200          | ≤ 24 ms*     | 19 ms                | 0                        |
-| 50 000| 46 ms              | 187 ms         | **200**      | 9 ms         | 37 ms                | 71 ms                    |
+| 0     | 45 мс              | 80 мс          | 60           | ≤ 27 мс*     | –                    | –                        |
+| 1 000 | 49 мс              | 99 мс          | 200          | 10 мс        | 19 мс                | 0                        |
+| 10 000| 52 мс              | 100 мс         | 200          | ≤ 24 мс*     | 19 мс                | 0                        |
+| 50 000| 46 мс              | 187 мс         | **200**      | 9 мс         | 37 мс                | 71 мс                    |
 
-\* includes `requestAnimationFrame` wait and first-run JIT; varies 4–27 ms between runs, no trend with N.
-Legacy popup on the same machine: **89 ms (empty) → 111 ms (10k) → 271 ms (50k exceptions)** to a usable Exceptions tab.
-"Cold open" for the new popup does not include loading rules (deferred to the Rules tab, which is the 187 ms @ 50k).
+\* включает ожидание `requestAnimationFrame` и первый прогон JIT; от запуска к запуску колеблется в пределах 4–27 мс, без зависимости от N.
+Popup старой версии на той же машине: **89 мс (пусто) → 111 мс (10 тыс.) → 271 мс (50 тыс. исключений)** до пригодной вкладки Exceptions.
+«Холодное открытие» нового popup не включает загрузку правил (она отложена до вкладки Rules, это 187 мс при 50 тыс.).
 
-Bulk import through the UI (paste → Preview → Import → worker applied):
+Массовый импорт через интерфейс (вставка → Preview → Import → воркер применил):
 
-| lines  | parse + preview | write (1 transaction) | longest main-thread task | until the worker applied the new PAC |
+| строк | разбор + предпросмотр | запись (1 транзакция) | самая долгая задача главного потока | до применения нового PAC воркером |
 |-------:|----------------:|----------------------:|-------------------------:|-------------------------------------:|
-| 10 000 | 71 ms           | 108 ms                | < 50 ms (no long task)   | 263 ms                               |
-| 50 000 | 111 ms          | 200 ms                | 69 ms                    | 323 ms                               |
+| 10 000 | 71 мс           | 108 мс                | < 50 мс (долгих задач нет) | 263 мс                             |
+| 50 000 | 111 мс          | 200 мс                | 69 мс                    | 323 мс                               |
 
-### What the browser measurements changed (found by measuring, not by guessing)
+### Что изменили браузерные замеры (найдено измерением, а не догадкой)
 
-1. First browser run, per-rule IndexedDB records: 50k import blocked the main thread **2.7 s** (≈55 µs per `put`),
-   select-all + disable 1.0 s, Rules tab 448 ms. Node + fake-indexeddb hid this completely.
-   → `benchmarks/idb-layout.mjs` compared three layouts in real Chrome; rules now live in 256 buckets
-   (write 3.4 s → 72 ms, read 332 → 83 ms at 50k). See ARCHITECTURE.md.
-2. Pasting 10–50k lines into a `<textarea>` cost hundreds of ms of layout on its own → large pastes are moved out of
-   the textarea into memory.
-3. Virtualisation: confirmed necessary and sufficient — DOM stays at ~200 elements for any N (a flat table would be
-   4N+ nodes: 200 000 at 50k).
+1. Первый прогон в браузере с отдельной записью IndexedDB на каждое правило: импорт 50 тыс. блокировал главный поток на **2,7 с**
+   (около 55 мкс на `put`), «выбрать все + отключить» — 1,0 с, вкладка Rules — 448 мс. Node с fake-indexeddb скрывал это полностью.
+   → `benchmarks/idb-layout.mjs` сравнил три схемы в настоящем Chrome; теперь правила лежат в 256 корзинах
+   (запись 3,4 с → 72 мс, чтение 332 → 83 мс при 50 тыс.). См. ARCHITECTURE.md.
+2. Вставка 10–50 тыс. строк в `<textarea>` сама по себе стоила сотни миллисекунд на раскладку → большие вставки уходят
+   из текстового поля в память.
+3. Виртуализация: подтверждена как необходимая и достаточная — DOM остаётся около 200 элементов при любом N (плоская таблица дала бы
+   4N+ узлов: 200 000 при 50 тыс.).
 
-## 4. Bundle (`npm run build`)
+## 4. Бандл (`npm run build`)
 
-| | new | legacy (React 18 + Headless UI + Heroicons + toast + Tailwind) |
+| | новая | старая (React 18 + Headless UI + Heroicons + toast + Tailwind) |
 |---|---:|---:|
-| popup JS, eager (first paint) | 16.0 KB (6.5 KB gz) | 291 KB (87.5 KB gz) |
-| popup JS, lazy tabs | 19.5 KB (8.1 KB gz) | – (all eager) |
-| background JS | 21.3 KB (8.9 KB gz) | 6.2 KB (2.2 KB gz) |
-| CSS | 7.4 KB (2.2 KB gz) | 22.4 KB (4.9 KB gz) |
-| total JS | 50.8 KB (21.2 KB gz) | 297 KB |
-| runtime dependencies | **0** | 7 |
+| JS popup, сразу (первая отрисовка) | 20,9 КБ (8,3 КБ gz) | 291 КБ (87,5 КБ gz) |
+| JS popup, вкладки по требованию | 31,4 КБ (12,8 КБ gz), в том числе русский словарь | – (всё сразу) |
+| JS фонового воркера | 22,1 КБ (9,1 КБ gz) | 6,2 КБ (2,2 КБ gz) |
+| CSS | 7,5 КБ (2,2 КБ gz) | 22,4 КБ (4,9 КБ gz) |
+| JS всего | 67,6 КБ (27,8 КБ gz) | 297 КБ |
+| зависимости времени выполнения | **0** | 7 |
 
-The worker is larger than legacy's because it now contains the compiler, validator, updater, and migration code.
-Dependency contribution: nothing third-party is bundled; `devDependencies` are build/test only.
+Воркер больше, чем у старой версии, потому что теперь содержит компилятор, валидатор, обновление источников и код миграции.
+Вклад зависимостей: в бандл не входит ничего стороннего; `devDependencies` нужны только для сборки и тестов.
+Русский словарь загружается только при русском языке интерфейса.
 
-## 5. Regression guards
+## 5. Защита от регрессий
 
-- `tests/perf.test.ts` (runs in `npm test`): exact PAC byte ceilings for 100/1k/10k/50k generated rules (≈ +15 % of today),
-  generous compile-time ceilings, and "lookup µs ≤ 25 at every size" (catches any return to O(N) lookup).
-- `npm run benchmark` exits non-zero when `benchmarks/thresholds.json` is exceeded (compile, import, hash, search,
-  lookup, lookup scaling ratio ≤ 12× from 100 → 50k).
-- `npm run benchmark:browser` is the real-Chrome end-to-end + popup benchmark (needs Playwright and a Chromium).
+- `tests/perf.test.ts` (выполняется в `npm test`): точные потолки размера PAC для 100 / 1 тыс. / 10 тыс. / 50 тыс. сгенерированных правил
+  (около +15 % к текущему), щедрые потолки времени сборки и «поиск ≤ 25 мкс при любом размере» (поймает любой возврат к линейному поиску).
+- `npm run benchmark` завершается с ненулевым кодом, если превышен порог из `benchmarks/thresholds.json` (сборка, импорт, хеш,
+  поиск, отношение времени поиска при росте от 100 до 50 тыс. не больше 12×).
+- `npm run benchmark:browser` — сквозная проверка в настоящем Chrome и замеры popup (нужны Playwright и Chromium).
 
-## 6. Things deliberately not optimised (no benchmark justified them)
+## 6. Что сознательно не оптимизировалось (ни один замер этого не оправдал)
 
-- No Web Worker for import, no search index, no memoisation layer, no caching of compiled PAC: compile is 78 ms at 50k and
-  runs only on an actual change; the revision + hash checks already skip all unchanged work.
-- No trie / Map in the PAC (see ARCHITECTURE.md).
-- Not measured: battery/RAM of the idle worker beyond "it does nothing between events"; Chrome's behaviour with PACs near
-  1 MB; real-network remote-PAC refresh (covered by mocked-`fetch` unit tests only).
+- Нет Web Worker для импорта, нет поискового индекса, нет слоя мемоизации, нет кеша собранного PAC: сборка 78 мс при 50 тыс. и выполняется
+  только при реальном изменении; проверки ревизии и хеша уже пропускают всю неизменную работу.
+- Нет trie / `Map` в PAC (см. ARCHITECTURE.md).
+- Не измерялось: расход батареи и памяти простаивающим воркером сверх того, что «между событиями он ничего не делает»; поведение
+  Chrome с PAC размером около 1 МБ; обновление удалённого PAC по реальной сети (покрыто только модульными тестами с подменой `fetch`).

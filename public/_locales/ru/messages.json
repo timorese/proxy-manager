@@ -1,0 +1,7 @@
+{
+  "appName": { "message": "PAC Proxy Manager" },
+  "appDescription": {
+    "message": "Быстрый менеджер PAC и прокси: правила по доменам, несколько PAC-источников, цепочки с резервными серверами. Без слежки и без удалённого кода."
+  },
+  "actionTitle": { "message": "PAC Proxy Manager" }
+}
