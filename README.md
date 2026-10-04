@@ -3,8 +3,6 @@
 A Manifest V3 Chrome/Chromium extension for managing proxies, PAC scripts and per-domain rules. Chrome does the routing
 (`chrome.proxy` + a compiled PAC); the extension only compiles configuration into PAC and applies it when it actually changed.
 
-Functional reference: [ilyachase/pac-proxy-manager-extension](https://github.com/ilyachase/pac-proxy-manager-extension).
-This is a from-scratch rewrite, not a fork — see [`docs/PERFORMANCE_AUDIT.md`](docs/PERFORMANCE_AUDIT.md) for why.
 
 ## Features
 
