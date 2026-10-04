@@ -40,6 +40,7 @@ proxy while an unlisted host stays DIRECT; a redundant rule produces a new revis
 produces exactly one; an edit made right after `ServiceWorker.stopAllWorkers` is applied (storage event wakes the worker;
 note: I could not independently prove that Chrome had terminated the worker in this headless run — the restart
 property is asserted by the unit test that builds a fresh `SyncEngine` over the same storage); OFF releases control;
+remote PAC source via the UI: downloaded once by the worker, one `chrome.alarms` alarm at the configured period, manual Update sends `If-None-Match` and the 304 causes no rebuild, mode PAC routes through the third-party script, and after the PAC server goes offline the error is shown (PAC tab + Home) while the last good script keeps routing (the test PAC server sends CORS headers because headless Chromium cannot answer the optional host-permission prompt, so that prompt path itself is untested);
 Chrome accepted and correctly executed a 284 KB PAC produced from 50 000 imported rules.
 
 Popup (median of 5 cold opens, rules pre-seeded in IndexedDB):

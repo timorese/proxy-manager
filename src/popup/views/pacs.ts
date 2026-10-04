@@ -229,12 +229,12 @@ export function createPacsView(): View {
         if (!check.ok) return setText(err, `Invalid script: ${check.reason}`);
       }
       // permissions.request needs the user gesture, so it must be called synchronously from the click handler.
+      // It is NOT awaited before saving: the prompt may stay open for a long time (or never resolve in automation).
       const permission = isUrl
         ? chrome.permissions.request({ origins: [origin] }).catch(() => false)
         : Promise.resolve(true);
       save.disabled = true;
       void (async () => {
-        await permission; // if denied the fetch may still work when the server sends CORS headers
         const id = existing?.id ?? newId();
         const urlChanged = isUrl && existing?.url !== url.value.trim();
         const base: PacSource = {
@@ -252,6 +252,11 @@ export function createPacsView(): View {
           else await repos.pacs.put(base);
           formHost.replaceChildren();
           await commit();
+          await load();
+          // Try right away (works when the server sends CORS headers), and once more if the user grants the origin later.
+          void permission.then((granted) => {
+            if (granted) void refreshPac(id).then(load, () => {});
+          });
           setText(msg, 'Downloading…');
           try {
             const r = await refreshPac(id);

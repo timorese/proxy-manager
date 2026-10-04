@@ -32,7 +32,8 @@ const closure = (entry) => {
   while (q.length) {
     const f = q.pop();
     const { stat, dyn } = imports(f);
-    for (const s of stat) if (!seen.has(s)) {
+    for (const s of stat)
+      if (!seen.has(s)) {
         seen.add(s);
         q.push(s);
       }

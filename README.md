@@ -52,4 +52,4 @@ Load `dist/` via `chrome://extensions` → Developer mode → *Load unpacked*.
 | PAC size @ 50k rules | 1.55 MB | ~0.5 MB |
 | popup JS (eager) | 291 KB | 16 KB |
 | popup cold open (50k rules stored) | 271 ms | 46 ms |
-| 50k-line import, main thread blocked | n/a (textarea) | 69 ms longest task |
+| 50k-line import, longest main-thread task | not measured | 69 ms |

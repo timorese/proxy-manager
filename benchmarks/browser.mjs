@@ -257,6 +257,94 @@ await page.close();
 await p2.close();
 await p3.close();
 
+// Remote PAC source through the UI: download, conditional refresh (304), alarm, routing via the third-party PAC.
+{
+  let conditional = 0;
+  let requests = 0;
+  const pacSrv = http.createServer((req, res) => {
+    requests++;
+    if (req.headers['if-none-match'] === '"v1"') {
+      conditional++;
+      res.statusCode = 304;
+      return res.end();
+    }
+    res.setHeader('etag', '"v1"');
+    res.setHeader('access-control-allow-origin', '*'); // headless Chromium cannot answer the optional-permission prompt
+    res.setHeader('content-type', 'application/x-ns-proxy-autoconfig');
+    res.end(
+      `function FindProxyForURL(u,h){ return h==="viapac.example" ? "PROXY 127.0.0.1:${PORT}" : "DIRECT"; }`,
+    );
+  });
+  await new Promise((r) => pacSrv.listen(0, '127.0.0.1', r));
+  const pp = await ctx.newPage();
+  await pp.goto(popupUrl);
+  await pp.waitForSelector('#power:not([disabled])');
+  await pp.click('button[data-tab="pac"]');
+  await pp.click('button:has-text("+ Add")');
+  await pp.fill('input[aria-label="Name"]', 'Local PAC');
+  await pp.fill('input[aria-label="PAC URL"]', `http://127.0.0.1:${pacSrv.address().port}/p.pac`);
+  await pp.selectOption('.card select >> nth=1', '15');
+  await pp.click('button:has-text("Save")');
+  await pp.waitForSelector('.list .item:has-text("Updated just now")', { timeout: 10000 });
+  ok(requests === 1, 'PAC URL source downloaded exactly once, by the worker');
+  const alarm = await pp.evaluate(() => chrome.alarms.get('pac-refresh'));
+  ok(
+    alarm?.periodInMinutes === 15,
+    `chrome.alarms has one refresh alarm (period ${alarm?.periodInMinutes} min), no setInterval`,
+  );
+  await pp.click('button:has-text("Update")');
+  await pp.waitForFunction(
+    () => document.querySelector('.small.muted[aria-live]')?.textContent?.includes('up to date'),
+    null,
+    { timeout: 8000 },
+  );
+  ok(conditional === 1, 'manual Update sent If-None-Match and the 304 was handled without a rebuild');
+  const rev1 = await pp.evaluate(async () => (await chrome.storage.local.get('rev')).rev);
+  await pp.click('button[data-tab="proxy"]');
+  await pp.click('.seg button:has-text("PAC")');
+  if (!(await pp.isChecked('#power'))) await pp.click('#power');
+  await pp.waitForFunction(() => document.querySelector('.badge')?.textContent === 'ACTIVE', null, {
+    timeout: 10000,
+  });
+  const via = await ctx.newPage();
+  hits.length = 0;
+  await via.goto('http://viapac.example/', { timeout: 10000 }).catch(() => {});
+  ok(
+    hits.some((u) => u.includes('viapac.example')),
+    'mode PAC: third-party PAC source decided the route (PROXY)',
+  );
+  hits.length = 0;
+  await via.goto('http://other-pac.example/', { timeout: 8000 }).catch(() => {});
+  ok(
+    !hits.some((u) => u.includes('other-pac.example')),
+    'mode PAC: third-party PAC said DIRECT for another host',
+  );
+  void rev1;
+  // pacSrv now goes offline: Update must fail gracefully, keep working config, and show the error
+  pacSrv.close();
+  pacSrv.closeAllConnections?.();
+  await pp.click('button[data-tab="pac"]');
+  await pp.click('button:has-text("Update")');
+  await pp.waitForSelector('.badge.err', { timeout: 20000 });
+  hits.length = 0;
+  await via.goto('http://viapac.example/', { timeout: 10000 }).catch(() => {});
+  ok(
+    hits.some((u) => u.includes('viapac.example')),
+    'offline PAC source: error shown, last good script still routes',
+  );
+  await pp.click('button[data-tab="proxy"]');
+  await pp.waitForSelector('.alert:has-text("PAC fetch failed")', { timeout: 5000 }).then(
+    () => ok(true, 'Home shows "PAC fetch failed"'),
+    () => ok(false, 'Home shows "PAC fetch failed"'),
+  );
+  await pp.click('#power');
+  await pp.waitForFunction(() => document.querySelector('.badge')?.textContent === 'OFF', null, {
+    timeout: 8000,
+  });
+  await via.close();
+  await pp.close();
+}
+
 // ---- 2. Popup benchmarks ---------------------------------------------------------------------
 console.log('\n== Popup benchmark (headless Chromium, this machine) ==');
 const rows = [];
