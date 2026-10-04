@@ -6,7 +6,7 @@
  * The goal is to reject the *common* corruptions (HTML error page, truncated download, empty body)
  * so one bad download can never break the combined PAC. It is a lexical check, not a JS parser.
  */
-export const MAX_PAC_SOURCE_BYTES = 1024 * 1024;
+export const MAX_PAC_SOURCE_BYTES = 2 * 1024 * 1024;
 
 export type SourceCheck = { ok: true } | { ok: false; reason: string };
 

@@ -5,7 +5,9 @@ import type { Repositories } from '../storage/index.ts';
 import type { PacSource } from '../types/index.ts';
 
 export const FETCH_TIMEOUT_MS = 15_000;
-export const MAX_BODY_BYTES = 1024 * 1024;
+export const MAX_BODY_BYTES = 2 * 1024 * 1024;
+/** Some PAC services (AntiZapret et al.) rate-limit to one request per minute and answer with an empty body beyond that. */
+export const MIN_REFETCH_MS = 60_000;
 export const ALARM_NAME = 'pac-refresh';
 
 export interface UpdaterDeps {
@@ -13,6 +15,14 @@ export interface UpdaterDeps {
   fetch?: typeof fetch;
   now?: () => number;
   timeoutMs?: number;
+}
+
+/** `fetch()` only says "Failed to fetch" for CORS, missing permission, TLS errors and unreachable hosts alike: say so. */
+export function describeNetworkError(e: unknown): string {
+  const msg = e instanceof Error ? e.message : 'network error';
+  return e instanceof TypeError
+    ? `${msg} (no host permission or CORS, TLS certificate problem, or server unreachable)`
+    : msg;
 }
 
 export type RefreshOutcome = 'updated' | 'not-modified' | 'failed' | 'skipped';
@@ -23,14 +33,35 @@ export type RefreshOutcome = 'updated' | 'not-modified' | 'failed' | 'skipped';
  *  - a failed attempt only touches metadata (`error`, `lastAttemptAt`);
  *  - 304 / identical hash never causes a rebuild.
  */
-export async function refreshSource(source: PacSource, deps: UpdaterDeps): Promise<RefreshOutcome> {
-  if (source.kind !== 'url') return 'skipped';
+const inFlight = new Map<string, Promise<RefreshOutcome>>();
+
+/** Concurrent refreshes of the same source share one request (and never clobber each other's metadata). */
+export function refreshSource(source: PacSource, deps: UpdaterDeps): Promise<RefreshOutcome> {
+  if (source.kind !== 'url') return Promise.resolve('skipped');
+  const running = inFlight.get(source.id);
+  if (running) return running;
+  const p = doRefresh(source, deps).finally(() => inFlight.delete(source.id));
+  inFlight.set(source.id, p);
+  return p;
+}
+
+async function doRefresh(source: PacSource, deps: UpdaterDeps): Promise<RefreshOutcome> {
   const { repos } = deps;
   const now = deps.now ?? Date.now;
   const doFetch = deps.fetch ?? fetch;
   const t = now();
+  // Never refetch a source that was fetched successfully a moment ago: rate-limited servers answer with an empty body.
+  if (
+    source.fetch.lastSuccessAt > 0 &&
+    source.fetch.hash !== '' &&
+    t - source.fetch.lastSuccessAt < MIN_REFETCH_MS
+  ) {
+    return 'not-modified';
+  }
   const fail = async (message: string): Promise<RefreshOutcome> => {
-    await repos.pacs.put({ ...source, fetch: { ...source.fetch, lastAttemptAt: t, error: message } });
+    // re-read: another writer (popup edit, previous attempt) may have changed the record since `source` was loaded
+    const latest = (await repos.pacs.get(source.id)) ?? source;
+    await repos.pacs.put({ ...latest, fetch: { ...latest.fetch, lastAttemptAt: t, error: message } });
     return 'failed';
   };
 
@@ -60,16 +91,26 @@ export async function refreshSource(source: PacSource, deps: UpdaterDeps): Promi
       });
       return 'not-modified';
     }
-    if (!res.ok) return await fail(`HTTP ${res.status}`);
+    if (!res.ok) {
+      const hint =
+        res.status === 429
+          ? ' (rate limited: wait a minute)'
+          : res.status === 403
+            ? ' (the server refused this browser)'
+            : '';
+      return await fail(`HTTP ${res.status}${hint}`);
+    }
     const len = Number(res.headers.get('content-length') ?? 0);
     if (len > MAX_BODY_BYTES) return await fail('script too large');
     text = await res.text();
   } catch (e) {
-    return await fail(ctl.signal.aborted ? 'timeout' : e instanceof Error ? e.message : 'network error');
+    return await fail(ctl.signal.aborted ? 'timeout' : describeNetworkError(e));
   } finally {
     clearTimeout(timer);
   }
 
+  if (text.trim() === '')
+    return await fail('empty response (the server may be rate limiting or rejecting this browser)');
   const check = validatePacSource(text);
   if (!check.ok) return await fail(`invalid script: ${check.reason}`);
 

@@ -1,6 +1,7 @@
 import { validatePacSource } from '../../pac/pac-source.ts';
 import { hashString } from '../../shared/hash.ts';
 import { newId } from '../../shared/ids.ts';
+import { hostPermissionPattern } from '../../shared/origin.ts';
 import type { PacSource } from '../../types/index.ts';
 import { h, setChildren, setText } from '../dom.ts';
 import { ago, fmtBytes } from '../format.ts';
@@ -97,6 +98,27 @@ export function createPacsView(): View {
         },
       },
     });
+    // A failed download is very often a missing host permission (or CORS): offer to grant it right here.
+    const grant = h('button', {
+      class: 'btn',
+      type: 'button',
+      text: t('Grant access'),
+      hidden: !(s.kind === 'url' && s.fetch.error),
+      title: hostPermissionPattern(s.url || 'https://invalid.invalid/'),
+      on: {
+        click: () => {
+          // permissions.request needs the click's user gesture: call it first, before any await
+          const asked = chrome.permissions
+            .request({ origins: [hostPermissionPattern(s.url)] })
+            .catch(() => false);
+          void asked.then(async (granted) => {
+            setText(msg, granted ? t('Downloading…') : t('Access was not granted.'));
+            if (granted) await refreshPac(s.id).catch(() => {});
+            await load();
+          });
+        },
+      },
+    });
     const update = h('button', {
       class: 'btn',
       type: 'button',
@@ -161,6 +183,7 @@ export function createPacsView(): View {
           'div',
           { class: 'row', style: 'margin-top:4px' },
           update,
+          grant,
           h('button', {
             class: 'btn',
             type: 'button',
@@ -238,7 +261,7 @@ export function createPacsView(): View {
         try {
           const u = new URL(url.value.trim());
           if (u.protocol !== 'http:' && u.protocol !== 'https:') throw new Error();
-          origin = `${u.origin}/*`;
+          origin = hostPermissionPattern(u.href);
         } catch {
           return setText(err, t('Enter a valid http(s) URL.'));
         }
@@ -271,16 +294,23 @@ export function createPacsView(): View {
           formHost.replaceChildren();
           await commit();
           await load();
-          // Try right away (works when the server sends CORS headers), and once more if the user grants the origin later.
-          void permission.then((granted) => {
-            if (granted) void refreshPac(id).then(load, () => {});
-          });
+          // Try right away (works when the server sends CORS headers). Only if that failed, retry once after the user
+          // grants the origin: a second request right after a successful one would hit rate-limited servers.
           setText(msg, t('Downloading…'));
+          let failed = false;
           try {
             const r = await refreshPac(id);
-            setText(msg, r.failed ? t('Download failed. See the status badge.') : t('Downloaded.'));
+            failed = r.failed > 0;
+            setText(msg, failed ? t('Download failed. See the status badge.') : t('Downloaded.'));
           } catch (e) {
+            failed = true;
             setText(msg, e instanceof Error ? e.message : String(e));
+          }
+          if (failed) {
+            void permission.then(async (granted) => {
+              if (granted) await refreshPac(id).catch(() => {});
+              await load();
+            });
           }
           await load();
         } else {

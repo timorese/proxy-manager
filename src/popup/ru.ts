@@ -28,6 +28,8 @@ export const ru: Dictionary = {
     pac: 'PAC',
     'Updated {when}': 'Обновлён {when}',
     'Not downloaded yet': 'Ещё не загружен',
+    'Grant access': 'Разрешить доступ',
+    'Access was not granted.': 'Доступ не предоставлен.',
     never: 'никогда',
     'just now': 'только что',
     '{n} s ago': '{n} с назад',

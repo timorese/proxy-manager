@@ -96,7 +96,7 @@ describe('remote PAC updater', () => {
     expect(res.failed).toBe(1);
     expect(await repos.pacs.getBody('u')).toBe(GOOD);
     expect((await repos.pacs.get('u'))?.fetch).toMatchObject({
-      error: 'Failed to fetch',
+      error: expect.stringContaining('Failed to fetch'),
       lastAttemptAt: T0,
       lastSuccessAt: 1,
     });
@@ -181,5 +181,60 @@ describe('chrome.alarms scheduling', () => {
     await ensureAlarm(api, [urlSource({ refreshMinutes: 0 })]);
     expect(store.has(ALARM_NAME)).toBe(false);
     expect(log.at(-1)).toBe('clear');
+  });
+});
+
+describe('rate-limited PAC services', () => {
+  it('does not refetch a source that succeeded less than a minute ago', async () => {
+    const { repos } = makeEnv();
+    const h = await hashString(GOOD);
+    await repos.pacs.put(
+      urlSource({ fetch: emptyMeta({ lastSuccessAt: T0 - 5_000, lastAttemptAt: T0 - 5_000, hash: h }) }),
+      GOOD,
+    );
+    const { f, calls } = fakeFetch(() => new Response(''));
+    const res = await refreshSources({ repos, fetch: f, now: () => T0 }, 'u');
+    expect(calls).toHaveLength(0);
+    expect(res.failed).toBe(0);
+    expect((await repos.pacs.get('u'))?.fetch.error).toBe('');
+  });
+
+  it('concurrent refreshes of one source make a single request', async () => {
+    const { repos } = makeEnv();
+    await repos.pacs.put(urlSource());
+    const { f, calls } = fakeFetch(() => new Response(GOOD));
+    const [a, b] = await Promise.all([
+      refreshSource(urlSource(), { repos, fetch: f, now: () => T0 }),
+      refreshSource(urlSource(), { repos, fetch: f, now: () => T0 }),
+    ]);
+    expect(calls).toHaveLength(1);
+    expect(a).toBe('updated');
+    expect(b).toBe('updated');
+  });
+
+  it('empty body and HTTP 429 give actionable messages and keep the good copy', async () => {
+    const { repos } = makeEnv();
+    await repos.pacs.put(urlSource({ fetch: emptyMeta({ lastSuccessAt: 1, hash: 'h' }) }), GOOD);
+    for (const [resp, msg] of [
+      [new Response(''), 'rate limiting'],
+      [new Response('', { status: 429 }), 'rate limited'],
+    ] as const) {
+      const { f } = fakeFetch(() => resp.clone());
+      await refreshSources({ repos, fetch: f, now: () => T0 }, 'u');
+      expect((await repos.pacs.get('u'))?.fetch.error).toContain(msg);
+      expect(await repos.pacs.getBody('u')).toBe(GOOD);
+    }
+  });
+
+  it('a failure does not clobber a success recorded meanwhile', async () => {
+    const { repos } = makeEnv();
+    await repos.pacs.put(urlSource());
+    const stale = (await repos.pacs.get('u'))!;
+    await repos.pacs.put({ ...stale, fetch: emptyMeta({ lastSuccessAt: T0, hash: 'h', bytes: 5 }) }, GOOD); // someone else succeeded
+    const { f } = fakeFetch(() => new Response('', { status: 503 }));
+    await refreshSource(stale, { repos, fetch: f, now: () => T0 + 1 });
+    const after = (await repos.pacs.get('u'))!;
+    expect(after.fetch.lastSuccessAt).toBe(T0);
+    expect(after.fetch.error).toContain('HTTP 503');
   });
 });

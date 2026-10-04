@@ -43,6 +43,6 @@ describe('validatePacSource (static, no execution)', () => {
     expect(ok('function FindProxyForURL(u,h){ )')).toBe(false);
   });
   it('rejects oversized scripts', () => {
-    expect(reason(`function FindProxyForURL(){}${' '.repeat(1024 * 1024)}`)).toMatch(/large/);
+    expect(reason(`function FindProxyForURL(){}${' '.repeat(2 * 1024 * 1024)}`)).toMatch(/large/);
   });
 });

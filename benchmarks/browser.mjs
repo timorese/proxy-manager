@@ -102,6 +102,31 @@ const seed = (page, n) =>
     db.close();
   }, n);
 
+// The updater refuses to refetch a source that succeeded < 60 s ago (rate-limited PAC services); age it for the test.
+const agePacSources = (page) =>
+  page.evaluate(async () => {
+    const db = await new Promise((res, rej) => {
+      const r = indexedDB.open('ppm2', 1);
+      r.onsuccess = () => res(r.result);
+      r.onerror = () => rej(r.error);
+    });
+    const tx = db.transaction('pacs', 'readwrite');
+    const st = tx.objectStore('pacs');
+    const all = await new Promise((res) => {
+      const q = st.getAll();
+      q.onsuccess = () => res(q.result);
+    });
+    for (const x of all) {
+      x.fetch.lastSuccessAt -= 120000;
+      x.fetch.lastAttemptAt -= 120000;
+      st.put(x);
+    }
+    await new Promise((res) => {
+      tx.oncomplete = res;
+    });
+    db.close();
+  });
+
 // ---------------------------------------------------------------------------------------------
 console.log(`Chromium: ${exe}\n`);
 const { ctx, sw, id } = await launch(dist);
@@ -361,6 +386,7 @@ await p3.close();
     alarm?.periodInMinutes === 15,
     `chrome.alarms has one refresh alarm (period ${alarm?.periodInMinutes} min), no setInterval`,
   );
+  await agePacSources(pp);
   await pp.click('button:has-text("Update")');
   await pp.waitForFunction(
     () => document.querySelector('.small.muted[aria-live]')?.textContent?.includes('up to date'),
@@ -425,6 +451,7 @@ await p3.close();
   pacSrv.close();
   pacSrv.closeAllConnections?.();
   await pp.click('button[data-tab="pac"]');
+  await agePacSources(pp);
   await pp.click('button:has-text("Update")');
   await pp.waitForSelector('.badge.err', { timeout: 20000 });
   hits.length = 0;
