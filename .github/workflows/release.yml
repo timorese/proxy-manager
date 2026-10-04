@@ -1,0 +1,31 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+      - name: Package
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          (cd dist && zip -r -X "../pac-proxy-manager-${VERSION}.zip" .)
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: pac-proxy-manager-*.zip
+          generate_release_notes: true

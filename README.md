@@ -53,3 +53,10 @@ Load `dist/` via `chrome://extensions` → Developer mode → *Load unpacked*.
 | popup JS (eager) | 291 KB | 16 KB |
 | popup cold open (50k rules stored) | 271 ms | 46 ms |
 | 50k-line import, longest main-thread task | not measured | 69 ms |
+
+## Install from a release
+
+1. Download `pac-proxy-manager-<version>.zip` from the GitHub *Releases* page and unzip it into a folder you will keep.
+2. `chrome://extensions` → enable *Developer mode* → *Load unpacked* → pick that folder.
+
+Maintainers: push a tag (`git tag v2.0.0 && git push origin v2.0.0`); `.github/workflows/release.yml` lints, tests, builds and attaches the zip.

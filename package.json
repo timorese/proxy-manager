@@ -14,7 +14,8 @@
     "benchmark": "node benchmarks/run.ts",
     "benchmark:legacy": "node benchmarks/legacy-baseline.mjs",
     "benchmark:browser": "node benchmarks/browser.mjs",
-    "icons": "node scripts/make-icons.mjs"
+    "icons": "node scripts/make-icons.mjs",
+    "package": "npm run build && node -e \"const v=require('./package.json').version;require('child_process').execSync(`cd dist && zip -r -X ../pac-proxy-manager-${v}.zip .`,{stdio:'inherit'})\""
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.15",
