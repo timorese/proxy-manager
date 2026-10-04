@@ -1,3 +1,10 @@
+/*
+ * Tokens. Every text/background pair below was measured (WCAG 2.x):
+ *   light: ok 5.4:1, warn 5.3:1, err 4.7:1 on their 14% tints; white on accent 5.2:1
+ *   dark:  white on accent 4.8:1; status text 4.5-6.6:1 on their tints
+ * One colour, one meaning: green = the extension is active/healthy, blue = traffic goes via PROXY,
+ * violet = decided by PAC, amber = warning, red = error, neutral = DIRECT / no opinion.
+ */
 :root {
   --bg: #ffffff;
   --bg-2: #f5f6f8;
@@ -6,10 +13,13 @@
   --fg-2: #5b6270;
   --line: #dfe2e8;
   --accent: #2563eb;
-  --accent-fg: #fff;
-  --ok: #16a34a;
-  --warn: #b45309;
-  --err: #dc2626;
+  --accent-fg: #ffffff;
+  --ok: #166534;
+  --warn: #92400e;
+  --err: #b91c1c;
+  --err-solid: #b91c1c;
+  --via-proxy: #1d4ed8;
+  --via-pac: #6d28d9;
   --err-bg: #fef2f2;
   --warn-bg: #fffbeb;
   --radius: 6px;
@@ -23,10 +33,13 @@
     --fg: #e8eaee;
     --fg-2: #99a1b0;
     --line: #2d323b;
-    --accent: #5b8cff;
+    --accent: #356ae6;
     --ok: #4ade80;
     --warn: #fbbf24;
-    --err: #f87171;
+    --err: #fca5a5;
+    --err-solid: #dc2626;
+    --via-proxy: #8ab0ff;
+    --via-pac: #c4b5fd;
     --err-bg: #2a1717;
     --warn-bg: #2a2314;
     color-scheme: dark;
@@ -39,13 +52,23 @@
   --fg: #e8eaee;
   --fg-2: #99a1b0;
   --line: #2d323b;
-  --accent: #5b8cff;
+  --accent: #356ae6;
   --ok: #4ade80;
   --warn: #fbbf24;
-  --err: #f87171;
+  --err: #fca5a5;
+  --err-solid: #dc2626;
+  --via-proxy: #8ab0ff;
+  --via-pac: #c4b5fd;
   --err-bg: #2a1717;
   --warn-bg: #2a2314;
   color-scheme: dark;
+}
+/* Increase Contrast: stronger separators and secondary text */
+@media (prefers-contrast: more) {
+  :root:root {
+    --line: color-mix(in srgb, var(--fg) 55%, transparent);
+    --fg-2: var(--fg);
+  }
 }
 * {
   box-sizing: border-box;
@@ -55,14 +78,14 @@ body {
   margin: 0;
 }
 body {
-  width: 420px;
-  height: 540px;
+  width: 26.25rem;
+  height: min(33.75rem, 600px);
   display: flex;
   flex-direction: column;
   background: var(--bg);
   color: var(--fg);
   font:
-    13px / 1.4 system-ui,
+    0.8125rem / 1.4 system-ui,
     -apple-system,
     "Segoe UI",
     Roboto,
@@ -79,7 +102,7 @@ textarea {
 code,
 .domain {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 12px;
+  font-size: 0.75rem;
 }
 
 .top {
@@ -93,7 +116,7 @@ code,
   align-items: center;
   gap: 8px;
   font-weight: 600;
-  font-size: 14px;
+  font-size: 0.875rem;
 }
 .logo {
   width: 18px;
@@ -154,15 +177,15 @@ code,
   outline-offset: 2px;
 }
 .switch.sm {
-  width: 32px;
-  height: 18px;
+  width: 34px;
+  height: 20px; /* macOS minimum control size 20 pt */
 }
 .switch.sm .track {
-  border-radius: 9px;
+  border-radius: 10px;
 }
 .switch.sm .track::after {
-  width: 12px;
-  height: 12px;
+  width: 14px;
+  height: 14px;
 }
 .switch.sm input:checked + .track::after {
   transform: translateX(14px);
@@ -253,28 +276,36 @@ code,
   display: inline-block;
   padding: 0 7px;
   border-radius: 9px;
-  font-size: 11px;
+  font-size: 0.6875rem;
   font-weight: 700;
   letter-spacing: 0.03em;
   background: var(--bg-3);
   color: var(--fg-2);
 }
 .badge.ok {
-  background: color-mix(in srgb, var(--ok) 18%, transparent);
+  background: color-mix(in srgb, var(--ok) 14%, transparent);
   color: var(--ok);
 }
 .badge.warn {
-  background: color-mix(in srgb, var(--warn) 20%, transparent);
+  background: color-mix(in srgb, var(--warn) 14%, transparent);
   color: var(--warn);
 }
 .badge.err {
-  background: color-mix(in srgb, var(--err) 18%, transparent);
+  background: color-mix(in srgb, var(--err) 14%, transparent);
   color: var(--err);
+}
+.badge.proxy {
+  background: color-mix(in srgb, var(--via-proxy) 14%, transparent);
+  color: var(--via-proxy);
+}
+.badge.pac {
+  background: color-mix(in srgb, var(--via-pac) 14%, transparent);
+  color: var(--via-pac);
 }
 
 h3 {
   margin: 0 0 6px;
-  font-size: 11px;
+  font-size: 0.6875rem;
   text-transform: uppercase;
   letter-spacing: 0.06em;
   color: var(--fg-2);
@@ -296,7 +327,7 @@ h3 {
   color: var(--fg-2);
 }
 .small {
-  font-size: 12px;
+  font-size: 0.75rem;
 }
 .ellipsis {
   overflow: hidden;
@@ -314,7 +345,8 @@ textarea {
   background: var(--bg);
   border: 1px solid var(--line);
   border-radius: var(--radius);
-  padding: 4px 8px;
+  padding: 4px 10px;
+  min-height: 1.75rem; /* macOS default control size 28 pt */
 }
 input[type="text"],
 input[type="search"],
@@ -327,7 +359,7 @@ textarea {
   width: 100%;
   resize: vertical;
   font-family: ui-monospace, Menlo, Consolas, monospace;
-  font-size: 12px;
+  font-size: 0.75rem;
 }
 button.btn {
   cursor: pointer;
@@ -348,8 +380,8 @@ button.btn.danger {
   color: var(--err);
 }
 button.btn.danger.armed {
-  background: var(--err);
-  border-color: var(--err);
+  background: var(--err-solid);
+  border-color: var(--err-solid);
   color: #fff;
 }
 button.btn:disabled {
@@ -358,6 +390,8 @@ button.btn:disabled {
 }
 button.icon {
   padding: 2px 6px;
+  min-width: 1.5rem;
+  min-height: 1.5rem;
 }
 :focus-visible {
   outline: 2px solid var(--accent);
@@ -365,7 +399,7 @@ button.icon {
 }
 
 .seg {
-  display: inline-flex;
+  display: flex; /* equal-width segments, full width (HIG segmented controls: keep segment size consistent) */
   border: 1px solid var(--line);
   border-radius: var(--radius);
   overflow: hidden;
@@ -373,6 +407,8 @@ button.icon {
 .seg button {
   border: 0;
   background: var(--bg);
+  flex: 1;
+  min-height: 1.75rem;
   padding: 4px 12px;
   cursor: pointer;
   border-right: 1px solid var(--line);
@@ -413,7 +449,7 @@ button.icon {
 .alert {
   border-radius: var(--radius);
   padding: 7px 10px;
-  font-size: 12px;
+  font-size: 0.75rem;
   border: 1px solid color-mix(in srgb, var(--err) 35%, transparent);
   background: var(--err-bg);
   color: var(--err);
@@ -435,7 +471,7 @@ button.icon {
 .field > label,
 .field > span.lbl {
   color: var(--fg-2);
-  font-size: 12px;
+  font-size: 0.75rem;
 }
 .form {
   display: flex;
@@ -469,10 +505,10 @@ button.icon {
 }
 .table-head {
   color: var(--fg-2);
-  font-size: 11px;
+  font-size: 0.6875rem;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  height: 24px;
+  height: 1.75rem;
   background: var(--bg-2);
   border: 1px solid var(--line);
   border-bottom: 0;
@@ -484,6 +520,38 @@ button.icon {
 }
 .table-head button:hover {
   color: var(--fg);
+}
+.table-head button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+  border-radius: 3px;
+}
+.table-head button[aria-sort="ascending"]::after {
+  content: " \25B4";
+}
+.table-head button[aria-sort="descending"]::after {
+  content: " \25BE";
+}
+.table-head button[aria-sort] {
+  color: var(--fg);
+}
+.vl-row .sel {
+  width: 20px;
+  height: 20px;
+  margin: 0;
+}
+.power-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--fg-2);
+  letter-spacing: 0.03em;
+  min-width: 2.2em;
+  text-align: right;
+}
+.power {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 .vl {
   position: relative;
@@ -515,7 +583,7 @@ button.icon {
 }
 .vl-row select {
   padding: 1px 2px;
-  font-size: 12px;
+  font-size: 0.75rem;
 }
 .vl-row .domain {
   overflow: hidden;
@@ -543,7 +611,7 @@ button.icon {
   flex-wrap: wrap;
 }
 .footer-note {
-  font-size: 11px;
+  font-size: 0.6875rem;
   color: var(--fg-2);
 }
 
@@ -551,4 +619,28 @@ button.btn[aria-pressed="true"] {
   background: var(--accent);
   border-color: var(--accent);
   color: var(--accent-fg);
+}
+
+/* found in review screenshots: [hidden] must win over display:grid, .check.card lost its padding, long counts wrapped */
+.vl-empty[hidden] {
+  display: none;
+}
+.check.card {
+  padding: 10px 12px;
+}
+.rules-wrap .row.between {
+  flex-wrap: wrap;
+  gap: 6px 8px;
+}
+.rules-wrap .row.between > .muted {
+  white-space: nowrap;
+}
+.row.between select {
+  min-width: 7.5rem;
+}
+.alerts details > summary {
+  cursor: pointer;
+  color: var(--fg-2);
+  font-size: 0.75rem;
+  margin-bottom: 6px;
 }

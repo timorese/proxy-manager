@@ -20,7 +20,12 @@ const host = $('#view');
 const tabs = [...document.querySelectorAll<HTMLButtonElement>('.tabs button')];
 
 async function show(tab: Tab): Promise<void> {
-  for (const b of tabs) b.setAttribute('aria-selected', String(b.dataset.tab === tab));
+  for (const b of tabs) {
+    const on = b.dataset.tab === tab;
+    b.setAttribute('aria-selected', String(on));
+    b.tabIndex = on ? 0 : -1; // roving tabindex: one Tab stop for the strip, arrow keys move within it
+    if (on) host.setAttribute('aria-label', b.textContent ?? '');
+  }
   let v = views.get(tab);
   if (!v) {
     v = await factories[tab]();
@@ -35,6 +40,27 @@ async function show(tab: Tab): Promise<void> {
 
 for (const b of tabs) b.addEventListener('click', () => void show(b.dataset.tab as Tab));
 
+// Full Keyboard Access: arrow keys / Home / End move between tabs (WAI-ARIA tabs pattern).
+$('.tabs').addEventListener('keydown', (e) => {
+  const i = tabs.findIndex((b) => b === document.activeElement);
+  if (i < 0) return;
+  const next =
+    e.key === 'ArrowRight'
+      ? (i + 1) % tabs.length
+      : e.key === 'ArrowLeft'
+        ? (i - 1 + tabs.length) % tabs.length
+        : e.key === 'Home'
+          ? 0
+          : e.key === 'End'
+            ? tabs.length - 1
+            : -1;
+  if (next < 0) return;
+  e.preventDefault();
+  const target = tabs[next]!;
+  target.focus();
+  void show(target.dataset.tab as Tab);
+});
+
 async function boot(): Promise<void> {
   const power = $<HTMLInputElement>('#power');
   const snap = await store.load(); // the ONLY storage read needed for first paint
@@ -48,7 +74,12 @@ async function boot(): Promise<void> {
   for (const b of tabs) b.textContent = t(TAB_LABEL[b.dataset.tab as Tab]);
   power.setAttribute('aria-label', t('Proxy on / off'));
   power.parentElement?.setAttribute('title', t('Proxy on / off'));
-  power.checked = snap.settings.enabled;
+  const powerLabel = $('#power-label');
+  const renderPower = (on: boolean) => {
+    power.checked = on;
+    powerLabel.textContent = t(on ? 'ON' : 'OFF');
+  };
+  renderPower(snap.settings.enabled);
   power.disabled = false;
 
   let initial: Tab = 'proxy';
@@ -59,13 +90,14 @@ async function boot(): Promise<void> {
   await show(initial);
 
   power.addEventListener('change', () => {
+    renderPower(power.checked);
     // Toggle applies immediately (no debounce): write once, then ask the worker to apply and report.
     void saveSettings({ enabled: power.checked })
       .then(() => syncNow())
       .catch(() => {});
   });
   store.subscribe((s, changed) => {
-    if (changed.has('settings')) power.checked = s.settings.enabled;
+    if (changed.has('settings')) renderPower(s.settings.enabled);
   });
 
   // Self-heal: if a debounced rebuild was lost (worker killed mid-debounce), nudge it. No-op when up to date.

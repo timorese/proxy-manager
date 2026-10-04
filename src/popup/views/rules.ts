@@ -11,7 +11,10 @@ import type { View } from './types.ts';
 
 type SortKey = 'domain' | 'action' | 'state';
 const ACTIONS: Action[] = ['direct', 'proxy', 'pac'];
-const ROW_H = 28;
+// 28 px at the default 16 px root font size; scales with Chrome's font-size setting so rows never clip larger text.
+const ROW_H = Math.round(
+  (28 * Number.parseFloat(getComputedStyle(document.documentElement).fontSize || '16')) / 16,
+);
 
 const cmpStr = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
 const SORTERS: Record<SortKey, (a: Rule, b: Rule) => number> = {
@@ -27,6 +30,8 @@ export function createRulesView(): View {
   const selected = new Set<string>();
   let query = '';
   let sortKey: SortKey = 'domain';
+  let sortDir: 1 | -1 = 1;
+  const sortButtons = new Map<SortKey, HTMLButtonElement>();
   let index: RuleIndex | undefined; // lazily built for "test host", invalidated on every mutation
   let loaded = false;
 
@@ -38,10 +43,10 @@ export function createRulesView(): View {
       const dom = h('span', { class: 'domain' });
       const act = h(
         'select',
-        { class: 'act', attrs: { 'aria-label': 'Action' } },
+        { class: 'act', attrs: { 'aria-label': t('Action') } },
         ...ACTIONS.map((a) => h('option', { value: a, text: t(a.toUpperCase()) })),
       );
-      const en = h('input', { type: 'checkbox', class: 'en', attrs: { 'aria-label': 'Enabled' } });
+      const en = h('input', { type: 'checkbox', class: 'en', attrs: { 'aria-label': t('Enabled') } });
       return h(
         'div',
         null,
@@ -62,6 +67,10 @@ export function createRulesView(): View {
       if (dom.textContent !== rule.pattern) {
         dom.textContent = rule.pattern;
         dom.title = rule.pattern;
+        // name every control after its rule, so a screen reader doesn't read 50 000 identical "Select rule"s
+        sel.setAttribute('aria-label', t('Select {x}', { x: rule.pattern }));
+        act.setAttribute('aria-label', t('Action for {x}', { x: rule.pattern }));
+        en.setAttribute('aria-label', t('Enable {x}', { x: rule.pattern }));
       }
       const isSel = selected.has(rule.pattern);
       if (sel.checked !== isSel) sel.checked = isSel;
@@ -96,7 +105,12 @@ export function createRulesView(): View {
   };
 
   const resort = () => {
-    all.sort(SORTERS[sortKey]);
+    const cmp = SORTERS[sortKey];
+    all.sort(sortDir === 1 ? cmp : (a, b) => cmp(b, a));
+    for (const [k, b] of sortButtons) {
+      if (k === sortKey) b.setAttribute('aria-sort', sortDir === 1 ? 'ascending' : 'descending');
+      else b.removeAttribute('aria-sort');
+    }
     refilter();
   };
 
@@ -200,24 +214,24 @@ export function createRulesView(): View {
     bulkAct.value = '';
   });
   let armed = false;
-  const bulkDel = h('button', { class: 'btn danger', type: 'button', text: 'Delete' });
+  const bulkDel = h('button', { class: 'btn danger', type: 'button', text: t('Delete') });
   bulkDel.addEventListener('click', () => {
     if (!armed) {
       armed = true;
       bulkDel.textContent = t('Delete {n}?', { n: selected.size });
       bulkDel.classList.add('armed');
-      setTimeout(() => {
-        armed = false;
-        bulkDel.classList.remove('armed');
-        bulkDel.textContent = t('Delete');
-      }, 2500);
       return;
     }
+    disarm();
+    void remove([...selected]);
+  });
+  // No timer (HIG accessibility: avoid time-boxed UI): the confirmation stays until focus leaves the button.
+  const disarm = () => {
     armed = false;
     bulkDel.classList.remove('armed');
     bulkDel.textContent = t('Delete');
-    void remove([...selected]);
-  });
+  };
+  bulkDel.addEventListener('blur', disarm);
   const bulk = h(
     'div',
     { class: 'bulk', hidden: true },
@@ -252,18 +266,26 @@ export function createRulesView(): View {
     updateBulk();
   });
 
-  const sortBtn = (key: SortKey, label: string) =>
-    h('button', {
+  const sortBtn = (key: SortKey, label: string) => {
+    const b = h('button', {
       type: 'button',
       text: label,
       title: t('Sort by {x}', { x: label.toLowerCase() }),
       on: {
         click: () => {
-          sortKey = key;
+          // clicking the sorted column again reverses it (HIG lists-and-tables: re-sort in the opposite direction)
+          if (sortKey === key) sortDir = sortDir === 1 ? -1 : 1;
+          else {
+            sortKey = key;
+            sortDir = 1;
+          }
           resort();
         },
       },
     });
+    sortButtons.set(key, b);
+    return b;
+  };
 
   // row events (one delegated listener for the whole list)
   list.el.addEventListener('change', (e) => {
@@ -393,7 +415,7 @@ export function createRulesView(): View {
 
   const testInput = h('input', {
     type: 'text',
-    class: 'mono',
+    class: 'grow mono',
     placeholder: t('test host: mail.example.com'),
     attrs: { 'aria-label': t('Test a host'), spellcheck: 'false' },
   });

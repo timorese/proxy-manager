@@ -12,10 +12,13 @@
   <!-- Static shell: painted before any JS or storage read finishes. -->
   <header class="top">
     <div class="brand"><span class="logo" aria-hidden="true"></span><span>PAC Proxy</span></div>
-    <label class="switch" title="Proxy on / off">
-      <input id="power" type="checkbox" aria-label="Proxy on/off" disabled>
-      <span class="track"></span>
-    </label>
+    <div class="power">
+      <span class="power-label" id="power-label" aria-hidden="true"></span>
+      <label class="switch" title="Proxy on / off">
+        <input id="power" type="checkbox" aria-label="Proxy on/off" disabled>
+        <span class="track"></span>
+      </label>
+    </div>
   </header>
   <div class="tabs" role="tablist">
     <button type="button" role="tab" data-tab="proxy" aria-selected="true">Proxy</button>
@@ -23,7 +26,7 @@
     <button type="button" role="tab" data-tab="rules" aria-selected="false">Rules</button>
     <button type="button" role="tab" data-tab="settings" aria-selected="false">Settings</button>
   </div>
-  <main id="view">
+  <main id="view" role="tabpanel" aria-label="Proxy">
     <div class="skeleton" aria-hidden="true"><i></i><i></i><i></i></div>
   </main>
   <script src="../lang-boot.js"></script>

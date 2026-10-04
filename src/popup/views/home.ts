@@ -27,6 +27,7 @@ const MODES: { id: Mode; label: string; hint: string }[] = [
 
 export function createHomeView(): View {
   let pacs: PacSource[] | undefined;
+  let alertsOpen = false;
 
   const alerts = h('div', { class: 'alerts', attrs: { 'aria-live': 'polite' } });
   const stLabel = h('span', { class: 'badge' });
@@ -146,7 +147,7 @@ export function createHomeView(): View {
     const r = currentRoute();
     setText(siteName, siteHost);
     setText(siteRoute, t(r.action.toUpperCase()));
-    siteRoute.className = `badge ${r.action === 'direct' ? '' : r.action === 'proxy' ? 'ok' : 'warn'}`;
+    siteRoute.className = `badge ${r.action === 'direct' ? '' : r.action}`; // blue = via proxy, violet = via PAC, neutral = direct
     setText(
       siteVia,
       [
@@ -228,20 +229,32 @@ export function createHomeView(): View {
     setText(stRules, String(s.rules));
     setText(stPac, s.pac);
     const errors = collectErrors(state, pacs);
-    setChildren(
-      alerts,
-      ...errors.map((e) =>
-        h(
-          'div',
-          {
-            class: e.code === 'proxy_rejected' || e.code === 'controlled_by_other' ? 'alert' : 'alert warn',
-            style: 'margin-bottom:6px',
-          },
-          h('b', { text: `${t(ERROR_TITLE[e.code])}. ` }),
-          e.message,
-        ),
+    const nodes = errors.map((e) =>
+      h(
+        'div',
+        {
+          class: e.code === 'proxy_rejected' || e.code === 'controlled_by_other' ? 'alert' : 'alert warn',
+          style: 'margin-bottom:6px',
+        },
+        h('b', { text: `${t(ERROR_TITLE[e.code])}. ` }),
+        e.message,
       ),
     );
+    if (nodes.length <= 1) setChildren(alerts, ...nodes);
+    else {
+      // Several problems must not push the controls off a 540 px popup: show the first, fold the rest.
+      const more = h(
+        'details',
+        null,
+        h('summary', { text: t('+{n} more', { n: nodes.length - 1 }) }),
+        ...nodes.slice(1),
+      );
+      more.open = alertsOpen;
+      more.addEventListener('toggle', () => {
+        alertsOpen = more.open;
+      });
+      setChildren(alerts, nodes[0], more);
+    }
   };
 
   const renderMode = () => {
@@ -308,6 +321,7 @@ function proxyRow(p: ProxyServer, i: number, all: readonly ProxyServer[]): HTMLE
       type: 'button',
       text: '↑',
       title: t('Move up'),
+      attrs: { 'aria-label': `${t('Move up')}: ${formatProxy(p)}` },
       disabled: i === 0,
       on: { click: move(-1) },
     }),
@@ -316,6 +330,7 @@ function proxyRow(p: ProxyServer, i: number, all: readonly ProxyServer[]): HTMLE
       type: 'button',
       text: '↓',
       title: t('Move down'),
+      attrs: { 'aria-label': `${t('Move down')}: ${formatProxy(p)}` },
       disabled: i === all.length - 1,
       on: { click: move(1) },
     }),
@@ -324,6 +339,7 @@ function proxyRow(p: ProxyServer, i: number, all: readonly ProxyServer[]): HTMLE
       type: 'button',
       text: '✕',
       title: t('Remove'),
+      attrs: { 'aria-label': `${t('Remove')}: ${formatProxy(p)}` },
       on: { click: () => save(all.filter((x) => x.id !== p.id)) },
     }),
   );

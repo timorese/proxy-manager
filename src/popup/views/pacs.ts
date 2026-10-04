@@ -85,14 +85,15 @@ export function createPacsView(): View {
             armed = true;
             del.textContent = t('Sure?');
             del.classList.add('armed');
-            setTimeout(() => {
-              armed = false;
-              del.textContent = t('Delete');
-              del.classList.remove('armed');
-            }, 2500);
             return;
           }
           void repos.pacs.delete(s.id).then(changed);
+        },
+        // No timer (time-boxed UI is hard for many people): the confirmation lasts until focus leaves the button.
+        blur: () => {
+          armed = false;
+          del.textContent = t('Delete');
+          del.classList.remove('armed');
         },
       },
     });
@@ -145,13 +146,15 @@ export function createPacsView(): View {
           class: 'small muted',
           text:
             s.kind === 'url'
-              ? t('Updated {when} · {every}', {
-                  when: ago(s.fetch.lastSuccessAt),
-                  every: t(
-                    REFRESH_CHOICES.find((c) => c.v === s.refreshMinutes)?.t ??
-                      `Every ${s.refreshMinutes} min`,
-                  ),
-                })
+              ? s.fetch.lastSuccessAt === 0
+                ? t('Not downloaded yet')
+                : t('Updated {when} · {every}', {
+                    when: ago(s.fetch.lastSuccessAt),
+                    every: t(
+                      REFRESH_CHOICES.find((c) => c.v === s.refreshMinutes)?.t ??
+                        `Every ${s.refreshMinutes} min`,
+                    ),
+                  })
               : t('Saved {when}', { when: ago(s.fetch.lastSuccessAt) }),
         }),
         h(
