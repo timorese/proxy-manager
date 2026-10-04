@@ -18,7 +18,8 @@ This is a from-scratch rewrite, not a fork — see [`docs/PERFORMANCE_AUDIT.md`]
 - Errors shown in the popup: PAC fetch failed · PAC compilation failed · Proxy config rejected · Invalid proxy ·
   Invalid domain rule · controlled by another extension. **Export diagnostics** contains no domains, hosts or URL paths.
 - Light/dark theme, import from 1.x ([MIGRATION.md](MIGRATION.md)).
-- Privacy: permissions are `proxy`, `storage`, `alarms` only; no `webRequest`, no host permissions (optional per-origin
+- Current site card on the Proxy tab: shows which route applies to the open site (DIRECT / PROXY / PAC and the rule or default that decided it) and adds it to the list in one click (`*.site`, with or without subdomains).
+- Privacy: permissions are `proxy`, `storage`, `alarms`, `activeTab` (the open tab's address is read only when you open the popup; no history); no `webRequest`, no host permissions (optional per-origin
   permission for the PAC server you add), no analytics, no `eval`, no remote code, zero runtime dependencies.
 
 ## Develop

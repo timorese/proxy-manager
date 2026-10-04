@@ -7,6 +7,8 @@ import type { PacSource, ProxyServer, Rule, RuntimeState, Settings } from '../ty
 export interface RuleRepository {
   getAll(): Promise<Rule[]>;
   count(): Promise<number>;
+  /** Reads only the buckets that can contain `patterns` (O(patterns), not O(rules)). Missing patterns are omitted. */
+  getMany(patterns: readonly string[]): Promise<Rule[]>;
   /** Insert or overwrite by `pattern`. */
   putMany(rules: readonly Rule[]): Promise<void>;
   deleteMany(patterns: readonly string[]): Promise<void>;

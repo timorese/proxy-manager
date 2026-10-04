@@ -160,7 +160,7 @@ Any failure only writes `error`/`lastAttemptAt`; the last good body keeps being 
 
 ## Permissions
 
-`proxy`, `storage`, `alarms`. No `host_permissions`, no `activeTab`, no `tabs`, no `webRequest`. Remote PAC fetches use
+`proxy`, `storage`, `alarms`, `activeTab`. `activeTab` exists only so the popup can read the address of the tab it was opened on ("Current site" card); it grants nothing until the user opens the popup and shows no install warning. The card resolves the route by reading only the rule buckets that can match that host (`RuleRepository.getMany`), not the whole list. No `host_permissions`, no `tabs`, no `webRequest`. Remote PAC fetches use
 `optional_host_permissions` requested for the PAC server's origin only, from the click that adds the source (if the user
 declines, `fetch` still works when that server sends CORS headers). `minimum_chrome_version` is `120` (sub-minute alarms,
 `color-mix()`); I only ran it on Chromium 141 (the one bundled in this sandbox), so lower versions are not verified.

@@ -546,3 +546,9 @@ button.icon {
   font-size: 11px;
   color: var(--fg-2);
 }
+
+button.btn[aria-pressed="true"] {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-fg);
+}

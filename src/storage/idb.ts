@@ -110,6 +110,22 @@ export class IdbRuleRepository implements RuleRepository {
     return buckets.reduce((n, b) => n + b.rules.length, 0);
   }
 
+  async getMany(patterns: readonly string[]): Promise<Rule[]> {
+    if (patterns.length === 0) return [];
+    const wanted = new Set(patterns);
+    const groups = groupByBucket(patterns, (p) => p);
+    const db = await this.db.open();
+    const store = db.transaction(RULES, 'readonly').objectStore(RULES);
+    const out: Rule[] = [];
+    await Promise.all(
+      [...groups.keys()].map(async (id) => {
+        const b = await req(store.get(id) as IDBRequest<Bucket | undefined>);
+        for (const r of b?.rules ?? []) if (wanted.has(r.pattern)) out.push(r);
+      }),
+    );
+    return out;
+  }
+
   /** ONE transaction: read-modify-write of every touched bucket. */
   private async modify(
     ids: Iterable<number>,

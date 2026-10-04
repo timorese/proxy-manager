@@ -4,7 +4,7 @@ import { normalizePattern } from '../../domain-rules/normalize.ts';
 import type { Action, Rule } from '../../types/index.ts';
 import { h, setChildren, setText } from '../dom.ts';
 import { download, plural } from '../format.ts';
-import { commit, repos } from '../store.ts';
+import { commit, repos, rulesState } from '../store.ts';
 import { VirtualList } from '../virtual-list.ts';
 import type { View } from './types.ts';
 
@@ -445,7 +445,8 @@ export function createRulesView(): View {
   return {
     el,
     onShow() {
-      if (loaded) return list.render();
+      if (loaded && !rulesState.dirty) return list.render();
+      rulesState.dirty = false;
       void repos.rules.getAll().then((rules) => {
         loaded = true;
         all = rules;

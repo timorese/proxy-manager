@@ -1,9 +1,17 @@
 import { formatProxy, parseProxy } from '../../proxy/serialize.ts';
 import { newId } from '../../shared/ids.ts';
-import type { Mode, PacSource, ProxyServer } from '../../types/index.ts';
+import type { Action, Mode, PacSource, ProxyServer, Rule } from '../../types/index.ts';
 import { h, setChildren, setText } from '../dom.ts';
+import {
+  candidatePatterns,
+  describeVia,
+  explainRoute,
+  hostOfUrl,
+  patternForSite,
+  type Route,
+} from '../route.ts';
 import { collectErrors, describeStatus, ERROR_TITLE } from '../status.ts';
-import { repos, saveProxies, saveSettings, store, syncNow } from '../store.ts';
+import { commit, repos, rulesState, saveProxies, saveSettings, store, syncNow } from '../store.ts';
 import type { View } from './types.ts';
 
 const MODES: { id: Mode; label: string; hint: string }[] = [
@@ -86,11 +94,108 @@ export function createHomeView(): View {
     if (e.key === 'Enter') addProxy();
   });
 
+  // ---- current site: which route applies, and one-click "add to list" ------------------------
+  let siteHost = '';
+  let siteRules: Rule[] = [];
+  const siteName = h('b', { class: 'mono ellipsis' });
+  const siteRoute = h('span', { class: 'badge' });
+  const siteVia = h('div', { class: 'small muted' });
+  const subCheck = h('input', {
+    type: 'checkbox',
+    checked: true,
+    attrs: { 'aria-label': 'Include subdomains' },
+  });
+  const ACTION_LABEL: Record<Action, string> = { proxy: 'Proxy', direct: 'Direct', pac: 'PAC' };
+  const addButtons = (['proxy', 'direct', 'pac'] as Action[]).map((a) =>
+    h('button', {
+      class: 'btn',
+      type: 'button',
+      text: ACTION_LABEL[a],
+      attrs: { 'data-action': a },
+      on: { click: () => void addSite(a) },
+    }),
+  );
+  const siteAddRow = h(
+    'div',
+    { class: 'row', style: 'margin-top:8px;flex-wrap:wrap' },
+    h('span', { class: 'small muted', text: 'Add to list:' }),
+    ...addButtons,
+    h('label', { class: 'row small', style: 'gap:4px' }, subCheck, 'subdomains'),
+  );
+  const siteCard = h(
+    'div',
+    { class: 'card', hidden: true },
+    h('h3', { text: 'Current site' }),
+    h('div', { class: 'row between' }, siteName, siteRoute),
+    siteVia,
+    siteAddRow,
+  );
+
+  const currentRoute = (): Route =>
+    explainRoute(
+      siteHost,
+      store.snap.settings,
+      { proxies: store.snap.proxies.some((p) => p.enabled), pacs: (pacs ?? []).some((p) => p.enabled) },
+      siteRules,
+    );
+
+  const renderSite = () => {
+    if (!siteHost) return;
+    siteCard.hidden = false;
+    const r = currentRoute();
+    setText(siteName, siteHost);
+    setText(siteRoute, r.action.toUpperCase());
+    siteRoute.className = `badge ${r.action === 'direct' ? '' : r.action === 'proxy' ? 'ok' : 'warn'}`;
+    setText(
+      siteVia,
+      [describeVia(r, store.snap.settings.mode), r.kind === 'rule' || r.kind === 'default' ? r.note : '']
+        .filter(Boolean)
+        .join(' · '),
+    );
+    const pattern = patternForSite(siteHost, subCheck.checked);
+    const existing = siteRules.find((x) => x.pattern === pattern);
+    for (const b of addButtons)
+      b.setAttribute(
+        'aria-pressed',
+        String(Boolean(existing?.enabled) && existing?.action === b.dataset.action),
+      );
+  };
+  subCheck.addEventListener('change', renderSite);
+
+  const loadSiteRules = async () => {
+    siteRules = (await repos.rules.getMany(candidatePatterns(siteHost))).filter((r) => r.enabled);
+    renderSite();
+  };
+
+  async function addSite(action: Action): Promise<void> {
+    const pattern = patternForSite(siteHost, subCheck.checked);
+    await repos.rules.putMany([{ pattern, action, enabled: true }]);
+    rulesState.dirty = true;
+    await commit();
+    await loadSiteRules();
+  }
+
+  const initSite = async () => {
+    // `?site=host` lets automated tests exercise this card; real use reads the active tab (permission: activeTab).
+    const override = new URLSearchParams(location.search).get('site');
+    if (override) siteHost = override;
+    else {
+      try {
+        const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+        siteHost = hostOfUrl(tab?.url);
+      } catch {
+        siteHost = '';
+      }
+    }
+    if (siteHost) await loadSiteRules();
+  };
+
   const el = h(
     'div',
     { class: 'view-enter', style: 'display:flex;flex-direction:column;gap:10px' },
     alerts,
     status,
+    siteCard,
     h('section', null, h('h3', { text: 'Default for unlisted sites' }), seg, hint),
     h(
       'section',
@@ -154,10 +259,13 @@ export function createHomeView(): View {
     if (changed.has('proxies')) renderProxies();
     if (changed.has('settings')) renderMode();
     renderStatus();
+    renderSite();
   });
   renderMode();
   renderProxies();
   renderStatus();
+
+  void initSite();
 
   return {
     el,
@@ -166,6 +274,7 @@ export function createHomeView(): View {
       void repos.pacs.list().then((l) => {
         pacs = l;
         renderStatus();
+        renderSite();
       });
     },
   };

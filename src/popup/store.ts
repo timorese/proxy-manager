@@ -81,6 +81,9 @@ class Store {
 
 export const store = new Store();
 
+/** Set when rules were changed outside the Rules view (e.g. "add site" on Home) so that view reloads next time. */
+export const rulesState = { dirty: false };
+
 /** Persist a configuration change. Storage write(s) + ONE revision bump; the worker rebuilds (debounced) on its own. */
 export async function commit(): Promise<void> {
   await repos.revision.bump();

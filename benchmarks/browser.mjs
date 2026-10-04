@@ -114,8 +114,8 @@ console.log('== End-to-end (real Chrome: chrome.proxy + PAC) ==');
 const manifest = await sw.evaluate(() => chrome.runtime.getManifest());
 ok(manifest.manifest_version === 3, 'Chrome loaded the MV3 manifest, service worker started');
 ok(
-  JSON.stringify(manifest.permissions) === JSON.stringify(['proxy', 'storage', 'alarms']),
-  'permissions are exactly proxy/storage/alarms',
+  JSON.stringify(manifest.permissions) === JSON.stringify(['proxy', 'storage', 'alarms', 'activeTab']),
+  'permissions are exactly proxy/storage/alarms/activeTab',
 );
 
 await sw.evaluate(() => {
@@ -242,6 +242,48 @@ const p3 = await ctx.newPage();
 hits.length = 0;
 await p3.goto('http://proxied.example/', { timeout: 10000 }).catch(() => {});
 ok(hits.length > 0, 'routing still works after worker restart');
+
+// Current-site card: which route applies + one-click "add to list" (?site= is the test hook for the active-tab lookup)
+{
+  const sp = await ctx.newPage();
+  await sp.goto(`${popupUrl}?site=proxied.example`);
+  await sp.waitForSelector('.card:has-text("Current site") .badge');
+  const badge = () => sp.textContent('.card:has-text("Current site") .badge');
+  const via = () => sp.textContent('.card:has-text("Current site") .small.muted:not(:has(*))');
+  ok((await badge()) === 'PROXY', 'site card: proxied.example shows PROXY');
+  ok(
+    ((await sp.textContent('.card:has-text("Current site")')) ?? '').includes('rule proxied.example'),
+    'site card: names the matching rule',
+  );
+  await sp.goto(`${popupUrl}?site=www.newsite.example`);
+  await sp.waitForSelector('.card:has-text("Current site") .badge');
+  ok(
+    (await badge()) === 'DIRECT' &&
+      ((await sp.textContent('.card:has-text("Current site")')) ?? '').includes('default (direct mode)'),
+    'site card: unlisted site shows DIRECT via default mode',
+  );
+  await sp.click('.card:has-text("Current site") button[data-action="proxy"]');
+  await sp.waitForFunction(
+    () =>
+      [...document.querySelectorAll('.card')]
+        .find((c) => c.textContent?.includes('Current site'))
+        ?.querySelector('.badge')?.textContent === 'PROXY',
+    null,
+    {
+      timeout: 5000,
+    },
+  );
+  ok(
+    ((await sp.textContent('.card:has-text("Current site")')) ?? '').includes('rule *.newsite.example'),
+    'site card: "Add to list -> Proxy" created *.newsite.example (www stripped) and the card updated',
+  );
+  await sp.click('button[data-tab="rules"]');
+  await sp.fill('input[type=search]', 'newsite');
+  await sp.waitForSelector('.vl-row:not([hidden]) .domain:has-text("*.newsite.example")');
+  ok(true, 'rule appears in the Rules tab (list reloaded after being changed from Home)');
+  void via;
+  await sp.close();
+}
 
 // master switch off releases control
 await page.click('#power');
