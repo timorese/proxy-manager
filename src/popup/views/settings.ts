@@ -139,6 +139,21 @@ export function createSettingsView(): View {
     },
   });
 
+  // Keyboard shortcut (⌘⇧U on macOS, Ctrl+Shift+U elsewhere by default; the user can change it in Chrome)
+  const shortcut = h('div', { class: 'small muted' });
+  void chrome.commands
+    ?.getAll()
+    .then((cmds) => {
+      const key = cmds.find((c) => c.name === '_execute_action')?.shortcut;
+      setText(
+        shortcut,
+        key
+          ? t('Open with {key} · change in chrome://extensions/shortcuts', { key })
+          : t('No shortcut set · chrome://extensions/shortcuts'),
+      );
+    })
+    .catch(() => {});
+
   const el = h(
     'div',
     { class: 'view-enter', style: 'display:flex;flex-direction:column;gap:10px' },
@@ -173,6 +188,7 @@ export function createSettingsView(): View {
       legacyText,
       h('div', { class: 'row', style: 'margin-top:6px' }, legacyBtn),
     ),
+    shortcut,
     out,
     h('div', {
       class: 'footer-note',

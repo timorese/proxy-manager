@@ -185,6 +185,9 @@ export const ru: Dictionary = {
     Light: 'Светлая',
     Dark: 'Тёмная',
     Maintenance: 'Обслуживание',
+    'Open with {key} · change in chrome://extensions/shortcuts':
+      'Открывается по {key} · изменить: chrome://extensions/shortcuts',
+    'No shortcut set · chrome://extensions/shortcuts': 'Сочетание не задано · chrome://extensions/shortcuts',
     'Re-apply now': 'Применить заново',
     'Export diagnostics': 'Экспорт диагностики',
     'Saved. The file contains no domains, hosts or URL paths.':

@@ -10,8 +10,9 @@
 </head>
 <body>
   <!-- Static shell: painted before any JS or storage read finishes. -->
+  <div class="chrome">
   <header class="top">
-    <div class="brand"><span class="logo" aria-hidden="true"></span><span>PAC Proxy</span></div>
+    <div class="brand"><img class="logo" src="../icons/icon-32.png" alt="" aria-hidden="true"><span>PAC Proxy</span></div>
     <div class="power">
       <span class="power-label" id="power-label" aria-hidden="true"></span>
       <label class="switch" title="Proxy on / off">
@@ -25,6 +26,7 @@
     <button type="button" role="tab" data-tab="pac" aria-selected="false">PAC</button>
     <button type="button" role="tab" data-tab="rules" aria-selected="false">Rules</button>
     <button type="button" role="tab" data-tab="settings" aria-selected="false">Settings</button>
+  </div>
   </div>
   <main id="view" role="tabpanel" aria-label="Proxy">
     <div class="skeleton" aria-hidden="true"><i></i><i></i><i></i></div>
