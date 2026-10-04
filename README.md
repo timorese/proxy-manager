@@ -4,9 +4,6 @@
 Маршрутизацию делает сам Chrome (`chrome.proxy` + собранный PAC). Расширение только превращает настройки в PAC
 и применяет его, когда настройки действительно изменились.
 
-Функциональный ориентир — [ilyachase/pac-proxy-manager-extension](https://github.com/ilyachase/pac-proxy-manager-extension).
-Это переписанный с нуля проект, а не форк. Почему так, объясняет [`docs/PERFORMANCE_AUDIT.md`](docs/PERFORMANCE_AUDIT.md).
-
 ## Возможности
 
 - Режим по умолчанию для сайтов вне списка: **Direct** (через прокси идут только сайты из правил), **Proxy** или **PAC**.
