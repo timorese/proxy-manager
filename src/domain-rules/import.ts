@@ -17,6 +17,7 @@ export interface ImportResult {
 }
 
 const MAX_ISSUES = 100;
+const MD_LINK = /\[([^\]]*)\]\([^)]*\)/g;
 
 const ACTIONS: Record<string, Action> = {
   direct: 'direct',
@@ -51,6 +52,9 @@ export function parseImport(text: string, defaultAction: Action = 'proxy'): Impo
     const lineNo = lines;
     pos = end + 1;
     if (line === '') continue;
+
+    // Lists copied from chat/markdown contain links like `*.[www.example.com](https://www.example.com)`: keep the link text.
+    if (line.includes('](')) line = line.replace(MD_LINK, '$1');
 
     let enabled = true;
     const c0 = line.charCodeAt(0);

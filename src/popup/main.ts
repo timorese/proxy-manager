@@ -1,4 +1,5 @@
 import { $ } from './dom.ts';
+import { resolveLang, setLang, t } from './i18n.ts';
 import { repos, saveSettings, store, syncNow } from './store.ts';
 import { applyTheme } from './theme.ts';
 import { createHomeView } from './views/home.ts';
@@ -13,6 +14,7 @@ const factories: Record<Tab, () => Promise<View> | View> = {
   rules: async () => (await import('./views/rules.ts')).createRulesView(),
   settings: async () => (await import('./views/settings.ts')).createSettingsView(),
 };
+const TAB_LABEL: Record<Tab, string> = { proxy: 'Proxy', pac: 'PAC', rules: 'Rules', settings: 'Settings' };
 const views = new Map<Tab, View>();
 const host = $('#view');
 const tabs = [...document.querySelectorAll<HTMLButtonElement>('.tabs button')];
@@ -37,6 +39,15 @@ async function boot(): Promise<void> {
   const power = $<HTMLInputElement>('#power');
   const snap = await store.load(); // the ONLY storage read needed for first paint
   applyTheme(snap.settings.theme);
+  const lang = resolveLang(snap.settings.language, chrome.i18n.getUILanguage());
+  await setLang(lang);
+  document.documentElement.lang = lang;
+  try {
+    localStorage.setItem('lang', snap.settings.language); // read by public/lang-boot.js before first paint
+  } catch {}
+  for (const b of tabs) b.textContent = t(TAB_LABEL[b.dataset.tab as Tab]);
+  power.setAttribute('aria-label', t('Proxy on / off'));
+  power.parentElement?.setAttribute('title', t('Proxy on / off'));
   power.checked = snap.settings.enabled;
   power.disabled = false;
 

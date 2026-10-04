@@ -285,6 +285,33 @@ ok(hits.length > 0, 'routing still works after worker restart');
   await sp.close();
 }
 
+// Russian UI (Settings -> Language): static shell, dictionary-driven views, plural forms
+{
+  const rp = await ctx.newPage();
+  await rp.goto(popupUrl);
+  await rp.waitForSelector('#power:not([disabled])');
+  await rp.click('button[data-tab="settings"]');
+  await rp.selectOption('select[aria-label="Language"]', 'ru');
+  await rp.waitForSelector('button[data-tab="rules"]:has-text("Правила")', { timeout: 8000 });
+  await rp.click('button[data-tab="proxy"]');
+  await rp.waitForSelector('h3:has-text("Для сайтов вне списка")');
+  ok(true, 'Russian UI: tabs and Home are translated after switching the language (popup reloads itself)');
+  await rp.goto(`${popupUrl}?site=proxied.example`);
+  await rp.waitForSelector('h3:has-text("Текущий сайт")');
+  ok(
+    ((await rp.textContent('.card:has-text("Текущий сайт")')) ?? '').includes('правило proxied.example'),
+    'Russian UI: site card explains the route in Russian',
+  );
+  await rp.click('button[data-tab="rules"]');
+  await rp.waitForSelector('text=/\\d+ (правило|правила|правил)/');
+  ok(true, 'Russian UI: rule counter uses Russian plural forms');
+  await rp.click('button[data-tab="settings"]');
+  await rp.selectOption('select[aria-label="Язык"]', 'en');
+  await rp.waitForSelector('button[data-tab="rules"]:has-text("Rules")', { timeout: 8000 });
+  ok(true, 'language switches back to English');
+  await rp.close();
+}
+
 // master switch off releases control
 await page.click('#power');
 await page.waitForFunction(() => document.querySelector('.badge')?.textContent === 'OFF', null, {

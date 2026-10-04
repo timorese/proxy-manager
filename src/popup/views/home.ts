@@ -2,6 +2,7 @@ import { formatProxy, parseProxy } from '../../proxy/serialize.ts';
 import { newId } from '../../shared/ids.ts';
 import type { Action, Mode, PacSource, ProxyServer, Rule } from '../../types/index.ts';
 import { h, setChildren, setText } from '../dom.ts';
+import { t } from '../i18n.ts';
 import {
   candidatePatterns,
   describeVia,
@@ -39,13 +40,13 @@ export function createHomeView(): View {
     h(
       'dl',
       { class: 'status', style: 'margin:0' },
-      h('dt', { text: 'Status' }),
+      h('dt', { text: t('Status') }),
       h('dd', null, stLabel),
-      h('dt', { text: 'Mode' }),
+      h('dt', { text: t('Mode') }),
       stMode,
-      h('dt', { text: 'Proxies' }),
+      h('dt', { text: t('Proxies') }),
       stProxies,
-      h('dt', { text: 'Rules' }),
+      h('dt', { text: t('Rules') }),
       stRules,
       h('dt', { text: 'PAC' }),
       stPac,
@@ -53,11 +54,11 @@ export function createHomeView(): View {
   );
 
   const hint = h('div', { class: 'small muted', style: 'margin-top:6px' });
-  const seg = h('div', { class: 'seg', role: 'group', attrs: { 'aria-label': 'Default mode' } });
+  const seg = h('div', { class: 'seg', role: 'group', attrs: { 'aria-label': t('Default mode') } });
   const modeButtons = MODES.map((m) =>
     h('button', {
       type: 'button',
-      text: m.label,
+      text: t(m.label),
       attrs: { 'aria-pressed': 'false' },
       on: {
         click: () => {
@@ -74,7 +75,7 @@ export function createHomeView(): View {
     type: 'text',
     class: 'grow mono',
     placeholder: 'socks5://127.0.0.1:1080',
-    attrs: { 'aria-label': 'Proxy address', spellcheck: 'false' },
+    attrs: { 'aria-label': t('Proxy address'), spellcheck: 'false' },
   });
   const addError = h('div', { class: 'small', style: 'color:var(--err)' });
   const addProxy = () => {
@@ -103,14 +104,14 @@ export function createHomeView(): View {
   const subCheck = h('input', {
     type: 'checkbox',
     checked: true,
-    attrs: { 'aria-label': 'Include subdomains' },
+    attrs: { 'aria-label': t('Include subdomains') },
   });
   const ACTION_LABEL: Record<Action, string> = { proxy: 'Proxy', direct: 'Direct', pac: 'PAC' };
   const addButtons = (['proxy', 'direct', 'pac'] as Action[]).map((a) =>
     h('button', {
       class: 'btn',
       type: 'button',
-      text: ACTION_LABEL[a],
+      text: t(ACTION_LABEL[a]),
       attrs: { 'data-action': a },
       on: { click: () => void addSite(a) },
     }),
@@ -118,14 +119,14 @@ export function createHomeView(): View {
   const siteAddRow = h(
     'div',
     { class: 'row', style: 'margin-top:8px;flex-wrap:wrap' },
-    h('span', { class: 'small muted', text: 'Add to list:' }),
+    h('span', { class: 'small muted', text: t('Add to list:') }),
     ...addButtons,
-    h('label', { class: 'row small', style: 'gap:4px' }, subCheck, 'subdomains'),
+    h('label', { class: 'row small', style: 'gap:4px' }, subCheck, t('subdomains')),
   );
   const siteCard = h(
     'div',
     { class: 'card', hidden: true },
-    h('h3', { text: 'Current site' }),
+    h('h3', { text: t('Current site') }),
     h('div', { class: 'row between' }, siteName, siteRoute),
     siteVia,
     siteAddRow,
@@ -144,11 +145,14 @@ export function createHomeView(): View {
     siteCard.hidden = false;
     const r = currentRoute();
     setText(siteName, siteHost);
-    setText(siteRoute, r.action.toUpperCase());
+    setText(siteRoute, t(r.action.toUpperCase()));
     siteRoute.className = `badge ${r.action === 'direct' ? '' : r.action === 'proxy' ? 'ok' : 'warn'}`;
     setText(
       siteVia,
-      [describeVia(r, store.snap.settings.mode), r.kind === 'rule' || r.kind === 'default' ? r.note : '']
+      [
+        describeVia(r, store.snap.settings.mode),
+        r.kind === 'rule' || r.kind === 'default' ? (r.note ? t(r.note) : '') : '',
+      ]
         .filter(Boolean)
         .join(' · '),
     );
@@ -196,17 +200,17 @@ export function createHomeView(): View {
     alerts,
     status,
     siteCard,
-    h('section', null, h('h3', { text: 'Default for unlisted sites' }), seg, hint),
+    h('section', null, h('h3', { text: t('Default for unlisted sites') }), seg, hint),
     h(
       'section',
       null,
-      h('h3', { text: 'Proxy servers (failover order)' }),
+      h('h3', { text: t('Proxy servers (failover order)') }),
       proxyList,
       h(
         'div',
         { class: 'row', style: 'margin-top:6px' },
         addInput,
-        h('button', { class: 'btn', type: 'button', text: 'Add', on: { click: addProxy } }),
+        h('button', { class: 'btn', type: 'button', text: t('Add'), on: { click: addProxy } }),
       ),
       addError,
     ),
@@ -216,7 +220,7 @@ export function createHomeView(): View {
   const renderStatus = () => {
     const { settings, proxies, state, rev } = store.snap;
     const s = describeStatus(settings, proxies, state, rev, pacs);
-    setText(stLabel, s.label);
+    setText(stLabel, t(s.label));
     stLabel.className = `badge ${s.tone}`;
     setText(stMode, s.modeText);
     setText(stProxies, s.proxies.length ? s.proxies.join('\n') : '—');
@@ -233,7 +237,7 @@ export function createHomeView(): View {
             class: e.code === 'proxy_rejected' || e.code === 'controlled_by_other' ? 'alert' : 'alert warn',
             style: 'margin-bottom:6px',
           },
-          h('b', { text: `${ERROR_TITLE[e.code]}. ` }),
+          h('b', { text: `${t(ERROR_TITLE[e.code])}. ` }),
           e.message,
         ),
       ),
@@ -243,13 +247,13 @@ export function createHomeView(): View {
   const renderMode = () => {
     const mode = store.snap.settings.mode;
     for (const [i, b] of modeButtons.entries()) b.setAttribute('aria-pressed', String(MODES[i]?.id === mode));
-    setText(hint, MODES.find((m) => m.id === mode)?.hint ?? '');
+    setText(hint, t(MODES.find((m) => m.id === mode)?.hint ?? ''));
   };
 
   const renderProxies = () => {
     const list = store.snap.proxies;
     if (list.length === 0) {
-      setChildren(proxyList, h('div', { class: 'empty', text: 'No proxy servers yet' }));
+      setChildren(proxyList, h('div', { class: 'empty', text: t('No proxy servers yet') }));
       return;
     }
     setChildren(proxyList, ...list.map((p, i) => proxyRow(p, i, list)));
@@ -285,7 +289,7 @@ function proxyRow(p: ProxyServer, i: number, all: readonly ProxyServer[]): HTMLE
   const toggle = h('input', {
     type: 'checkbox',
     checked: p.enabled,
-    attrs: { 'aria-label': `Enable ${formatProxy(p)}` },
+    attrs: { 'aria-label': t('Enable {x}', { x: formatProxy(p) }) },
     on: { change: () => save(all.map((x) => (x.id === p.id ? { ...x, enabled: toggle.checked } : x))) },
   });
   const move = (d: number) => () => {
@@ -303,7 +307,7 @@ function proxyRow(p: ProxyServer, i: number, all: readonly ProxyServer[]): HTMLE
       class: 'btn icon',
       type: 'button',
       text: '↑',
-      title: 'Move up',
+      title: t('Move up'),
       disabled: i === 0,
       on: { click: move(-1) },
     }),
@@ -311,7 +315,7 @@ function proxyRow(p: ProxyServer, i: number, all: readonly ProxyServer[]): HTMLE
       class: 'btn icon',
       type: 'button',
       text: '↓',
-      title: 'Move down',
+      title: t('Move down'),
       disabled: i === all.length - 1,
       on: { click: move(1) },
     }),
@@ -319,7 +323,7 @@ function proxyRow(p: ProxyServer, i: number, all: readonly ProxyServer[]): HTMLE
       class: 'btn icon danger',
       type: 'button',
       text: '✕',
-      title: 'Remove',
+      title: t('Remove'),
       on: { click: () => save(all.filter((x) => x.id !== p.id)) },
     }),
   );

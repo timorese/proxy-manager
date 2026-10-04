@@ -57,3 +57,31 @@ describe('parseImport', () => {
     expect(performance.now() - t).toBeLessThan(1500);
   });
 });
+
+describe('real-world wildcard lists', () => {
+  it('imports `*.domain` lists with IPs, deep hosts, bare domains and a markdown-pasted link', () => {
+    const text = [
+      '*.2ip.io',
+      '*.62.60.235.31',
+      '*.chat.openai.com.cdn.cloudflare.net',
+      '*.instagram.fiev22-1.fna.fbcdn.net',
+      '*.[www.instagram.com](https://www.instagram.com)',
+      '62.60.235.31',
+      'api.anthropic.com',
+      'claude.ai',
+    ].join('\n');
+    const r = parseImport(text, 'proxy');
+    expect(r.invalid).toBe(0);
+    expect(r.rules.map((x) => x.pattern)).toEqual([
+      '*.2ip.io',
+      '*.62.60.235.31',
+      '*.chat.openai.com.cdn.cloudflare.net',
+      '*.instagram.fiev22-1.fna.fbcdn.net',
+      '*.www.instagram.com',
+      '62.60.235.31',
+      'api.anthropic.com',
+      'claude.ai',
+    ]);
+    expect(r.rules.every((x) => x.action === 'proxy' && x.enabled)).toBe(true);
+  });
+});

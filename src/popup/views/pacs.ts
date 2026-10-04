@@ -4,6 +4,7 @@ import { newId } from '../../shared/ids.ts';
 import type { PacSource } from '../../types/index.ts';
 import { h, setChildren, setText } from '../dom.ts';
 import { ago, fmtBytes } from '../format.ts';
+import { t } from '../i18n.ts';
 import { commit, refreshPac, repos, store, syncNow } from '../store.ts';
 import type { View } from './types.ts';
 
@@ -44,15 +45,18 @@ export function createPacsView(): View {
   };
 
   const statusOf = (s: PacSource): [string, string] => {
-    if (s.kind === 'inline') return ['inline', ''];
-    if (s.fetch.error) return [`failed: ${s.fetch.error}`, 'err'];
-    if (!s.fetch.lastSuccessAt) return ['not downloaded', 'warn'];
-    return ['ok', 'ok'];
+    if (s.kind === 'inline') return [t('inline'), ''];
+    if (s.fetch.error) return [t('failed: {e}', { e: s.fetch.error }), 'err'];
+    if (!s.fetch.lastSuccessAt) return [t('not downloaded'), 'warn'];
+    return [t('ok'), 'ok'];
   };
 
   const renderList = () => {
     if (sources.length === 0) {
-      setChildren(listEl, h('div', { class: 'empty', text: 'No PAC sources. Add a URL or paste a script.' }));
+      setChildren(
+        listEl,
+        h('div', { class: 'empty', text: t('No PAC sources. Add a URL or paste a script.') }),
+      );
       return;
     }
     setChildren(listEl, ...sources.map(row));
@@ -63,7 +67,7 @@ export function createPacsView(): View {
     const toggle = h('input', {
       type: 'checkbox',
       checked: s.enabled,
-      attrs: { 'aria-label': `Enable ${s.name}` },
+      attrs: { 'aria-label': t('Enable {x}', { x: s.name }) },
       on: {
         change: () => {
           void repos.pacs.put({ ...s, enabled: toggle.checked }).then(changed);
@@ -74,16 +78,16 @@ export function createPacsView(): View {
     const del = h('button', {
       class: 'btn danger',
       type: 'button',
-      text: 'Delete',
+      text: t('Delete'),
       on: {
         click: () => {
           if (!armed) {
             armed = true;
-            del.textContent = 'Sure?';
+            del.textContent = t('Sure?');
             del.classList.add('armed');
             setTimeout(() => {
               armed = false;
-              del.textContent = 'Delete';
+              del.textContent = t('Delete');
               del.classList.remove('armed');
             }, 2500);
             return;
@@ -95,9 +99,9 @@ export function createPacsView(): View {
     const update = h('button', {
       class: 'btn',
       type: 'button',
-      text: 'Update',
+      text: t('Update'),
       disabled: s.kind !== 'url',
-      title: s.kind === 'url' ? 'Download now' : 'Inline scripts have nothing to download',
+      title: s.kind === 'url' ? t('Download now') : t('Inline scripts have nothing to download'),
       on: {
         click: async () => {
           update.disabled = true;
@@ -107,10 +111,10 @@ export function createPacsView(): View {
             setText(
               msg,
               r.failed
-                ? 'Update failed (kept the previous version).'
+                ? t('Update failed (kept the previous version).')
                 : r.updated
-                  ? 'Updated.'
-                  : 'Already up to date.',
+                  ? t('Updated.')
+                  : t('Already up to date.'),
             );
           } catch (e) {
             setText(msg, e instanceof Error ? e.message : String(e));
@@ -134,21 +138,32 @@ export function createPacsView(): View {
         ),
         h('div', {
           class: 'small muted ellipsis mono',
-          text: s.kind === 'url' ? s.url : `Inline script · ${fmtBytes(s.fetch.bytes)}`,
+          text: s.kind === 'url' ? s.url : t('Inline script · {size}', { size: fmtBytes(s.fetch.bytes) }),
           title: s.url,
         }),
         h('div', {
           class: 'small muted',
           text:
             s.kind === 'url'
-              ? `Updated ${ago(s.fetch.lastSuccessAt)} · ${REFRESH_CHOICES.find((c) => c.v === s.refreshMinutes)?.t ?? `${s.refreshMinutes} min`}`
-              : `Saved ${ago(s.fetch.lastSuccessAt)}`,
+              ? t('Updated {when} · {every}', {
+                  when: ago(s.fetch.lastSuccessAt),
+                  every: t(
+                    REFRESH_CHOICES.find((c) => c.v === s.refreshMinutes)?.t ??
+                      `Every ${s.refreshMinutes} min`,
+                  ),
+                })
+              : t('Saved {when}', { when: ago(s.fetch.lastSuccessAt) }),
         }),
         h(
           'div',
           { class: 'row', style: 'margin-top:4px' },
           update,
-          h('button', { class: 'btn', type: 'button', text: 'Edit', on: { click: () => void openForm(s) } }),
+          h('button', {
+            class: 'btn',
+            type: 'button',
+            text: t('Edit'),
+            on: { click: () => void openForm(s) },
+          }),
           del,
         ),
       ),
@@ -159,14 +174,14 @@ export function createPacsView(): View {
     const name = h('input', {
       type: 'text',
       value: existing?.name ?? '',
-      placeholder: 'Corporate PAC',
-      attrs: { 'aria-label': 'Name' },
+      placeholder: t('Corporate PAC'),
+      attrs: { 'aria-label': t('Name') },
     });
     const kind = h(
       'select',
       null,
       h('option', { value: 'url', text: 'URL' }),
-      h('option', { value: 'inline', text: 'Inline script' }),
+      h('option', { value: 'inline', text: t('Inline script') }),
     );
     kind.value = existing?.kind ?? 'url';
     const url = h('input', {
@@ -174,18 +189,18 @@ export function createPacsView(): View {
       value: existing?.url ?? '',
       placeholder: 'https://example.com/proxy.pac',
       class: 'mono',
-      attrs: { 'aria-label': 'PAC URL', spellcheck: 'false' },
+      attrs: { 'aria-label': t('PAC URL'), spellcheck: 'false' },
     });
     const refresh = h(
       'select',
       null,
-      ...REFRESH_CHOICES.map((c) => h('option', { value: String(c.v), text: c.t })),
+      ...REFRESH_CHOICES.map((c) => h('option', { value: String(c.v), text: t(c.t) })),
     );
     refresh.value = String(existing?.refreshMinutes ?? 0);
     const body = h('textarea', {
       rows: 8,
       placeholder: 'function FindProxyForURL(url, host) {\n  return "DIRECT";\n}',
-      attrs: { 'aria-label': 'PAC script', spellcheck: 'false' },
+      attrs: { 'aria-label': t('PAC script'), spellcheck: 'false' },
     });
     if (existing?.kind === 'inline') body.value = (await repos.pacs.getBody(existing.id)) ?? '';
     const err = h('div', {
@@ -198,10 +213,10 @@ export function createPacsView(): View {
       { class: 'field' },
       h('span', { class: 'lbl', text: 'URL' }),
       url,
-      h('span', { class: 'lbl', text: 'Refresh' }),
+      h('span', { class: 'lbl', text: t('Refresh') }),
       refresh,
     );
-    const bodyField = h('div', { class: 'field' }, h('span', { class: 'lbl', text: 'Script' }), body);
+    const bodyField = h('div', { class: 'field' }, h('span', { class: 'lbl', text: t('Script') }), body);
     const sync = () => {
       urlField.hidden = kind.value !== 'url';
       bodyField.hidden = kind.value !== 'inline';
@@ -209,12 +224,12 @@ export function createPacsView(): View {
     kind.addEventListener('change', sync);
     sync();
 
-    const save = h('button', { class: 'btn primary', type: 'button', text: 'Save' });
+    const save = h('button', { class: 'btn primary', type: 'button', text: t('Save') });
     save.addEventListener('click', () => {
       setText(err, '');
       const isUrl = kind.value === 'url';
       const trimmed = name.value.trim();
-      if (!trimmed) return setText(err, 'Name is required.');
+      if (!trimmed) return setText(err, t('Name is required.'));
       let origin = '';
       if (isUrl) {
         try {
@@ -222,11 +237,11 @@ export function createPacsView(): View {
           if (u.protocol !== 'http:' && u.protocol !== 'https:') throw new Error();
           origin = `${u.origin}/*`;
         } catch {
-          return setText(err, 'Enter a valid http(s) URL.');
+          return setText(err, t('Enter a valid http(s) URL.'));
         }
       } else {
         const check = validatePacSource(body.value);
-        if (!check.ok) return setText(err, `Invalid script: ${check.reason}`);
+        if (!check.ok) return setText(err, t('Invalid script: {r}', { r: check.reason }));
       }
       // permissions.request needs the user gesture, so it must be called synchronously from the click handler.
       // It is NOT awaited before saving: the prompt may stay open for a long time (or never resolve in automation).
@@ -257,10 +272,10 @@ export function createPacsView(): View {
           void permission.then((granted) => {
             if (granted) void refreshPac(id).then(load, () => {});
           });
-          setText(msg, 'Downloading…');
+          setText(msg, t('Downloading…'));
           try {
             const r = await refreshPac(id);
-            setText(msg, r.failed ? 'Download failed. See the status badge.' : 'Downloaded.');
+            setText(msg, r.failed ? t('Download failed. See the status badge.') : t('Downloaded.'));
           } catch (e) {
             setText(msg, e instanceof Error ? e.message : String(e));
           }
@@ -288,7 +303,7 @@ export function createPacsView(): View {
     const cancel = h('button', {
       class: 'btn',
       type: 'button',
-      text: 'Cancel',
+      text: t('Cancel'),
       on: { click: () => formHost.replaceChildren() },
     });
     setChildren(
@@ -296,9 +311,9 @@ export function createPacsView(): View {
       h(
         'div',
         { class: 'card form view-enter' },
-        h('h3', { text: existing ? 'Edit PAC source' : 'Add PAC source' }),
-        h('div', { class: 'field' }, h('span', { class: 'lbl', text: 'Name' }), name),
-        h('div', { class: 'field' }, h('span', { class: 'lbl', text: 'Type' }), kind),
+        h('h3', { text: existing ? t('Edit PAC source') : t('Add PAC source') }),
+        h('div', { class: 'field' }, h('span', { class: 'lbl', text: t('Name') }), name),
+        h('div', { class: 'field' }, h('span', { class: 'lbl', text: t('Type') }), kind),
         urlField,
         bodyField,
         err,
@@ -314,17 +329,19 @@ export function createPacsView(): View {
     h(
       'div',
       { class: 'row between' },
-      h('h3', { text: 'PAC sources', style: 'margin:0' }),
+      h('h3', { text: t('PAC sources'), style: 'margin:0' }),
       h('button', {
         class: 'btn primary',
         type: 'button',
-        text: '+ Add',
+        text: t('+ Add'),
         on: { click: () => void openForm() },
       }),
     ),
     h('div', {
       class: 'small muted',
-      text: 'Enabled sources are combined in this order: the first one that answers with something other than DIRECT wins. Scripts are embedded as data in the PAC given to Chrome; they never run inside the extension.',
+      text: t(
+        'Enabled sources are combined in this order: the first one that answers with something other than DIRECT wins. Scripts are embedded as data in the PAC given to Chrome; they never run inside the extension.',
+      ),
     }),
     formHost,
     listEl,

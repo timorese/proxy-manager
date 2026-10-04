@@ -167,7 +167,7 @@ declines, `fetch` still works when that server sends CORS headers). `minimum_chr
 
 ## Known limits / non-goals
 
-- English UI only (legacy shipped 13 locales). Strings are inline; adding `_locales` is mechanical but not done.
+- UI languages: English and Russian (`src/popup/i18n.ts`: the English text is the key, `ru.ts` is loaded lazily, `tests/i18n.test.ts` guards completeness). The extension name/description in the manifest and error details produced by the worker (e.g. `Corp: HTTP 503`) stay English. Legacy shipped 13 locales.
 - IPv6 literals are valid for proxy hosts but not for rules.
 - Only `scope: 'regular'` (not incognito).
 - No per-tab or URL-path rules: PAC receives the full URL, but domain rules are the requested scope.

@@ -1,5 +1,6 @@
 import { buildIndex, lookup } from '../domain-rules/matcher.ts';
 import type { Action, Rule, Settings } from '../types/index.ts';
+import { t } from './i18n.ts';
 
 /** Every stored pattern that could decide `host`: the exact host and `*.s` for the host and each parent suffix. */
 export function candidatePatterns(host: string): string[] {
@@ -67,4 +68,8 @@ export function explainRoute(
 }
 
 export const describeVia = (r: Route, mode: string): string =>
-  r.kind === 'rule' ? `rule ${r.via}` : r.kind === 'default' ? `default (${mode} mode)` : (r.note ?? '');
+  r.kind === 'rule'
+    ? t('rule {x}', { x: r.via ?? '' })
+    : r.kind === 'default'
+      ? t('default ({mode} mode)', { mode: t(mode) })
+      : t(r.note ?? '');

@@ -17,6 +17,8 @@ This is a from-scratch rewrite, not a fork — see [`docs/PERFORMANCE_AUDIT.md`]
   inline script; several, each enable/disable-able, combined safely (see ARCHITECTURE.md).
 - Errors shown in the popup: PAC fetch failed · PAC compilation failed · Proxy config rejected · Invalid proxy ·
   Invalid domain rule · controlled by another extension. **Export diagnostics** contains no domains, hosts or URL paths.
+- English and Russian UI (Settings → Language; follows the browser language by default). The Russian dictionary is a separate lazy chunk that English users never load; a test fails if any string lacks a translation.
+- Import accepts lists like `*.example.com` / `example.com` / IPs one per line (also pasted markdown links), with a default action.
 - Light/dark theme, import from 1.x ([MIGRATION.md](MIGRATION.md)).
 - Current site card on the Proxy tab: shows which route applies to the open site (DIRECT / PROXY / PAC and the rule or default that decided it) and adds it to the list in one click (`*.site`, with or without subdomains).
 - Privacy: permissions are `proxy`, `storage`, `alarms`, `activeTab` (the open tab's address is read only when you open the popup; no history); no `webRequest`, no host permissions (optional per-origin

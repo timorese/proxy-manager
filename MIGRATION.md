@@ -52,6 +52,6 @@ Invalid domains/proxies are skipped and reported in the import message.
 - Legacy PAC scripts were pasted *inside* `function userPacScriptN(){…}`. They are now isolated per source in their own
   function scope, which is stricter; a script that depended on leaking globals into other scripts will not.
 - Legacy refreshed nothing automatically. Imported URL sources start with refresh = manual; set an interval in the PAC tab.
-- Legacy UI language packs (13 locales) are not carried over (English only for now).
+- Legacy UI language packs (13 locales) are not carried over; the new UI is English and Russian.
 
 Tests: `tests/migration.test.ts` (mapping, junk handling, and an end-to-end legacy → PAC → routing check).

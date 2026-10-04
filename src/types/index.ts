@@ -4,6 +4,7 @@ export type Action = 'direct' | 'proxy' | 'pac';
 export type Mode = 'direct' | 'proxy' | 'pac';
 export type ProxyScheme = 'http' | 'https' | 'socks4' | 'socks5';
 export type Theme = 'auto' | 'light' | 'dark';
+export type Language = 'auto' | 'en' | 'ru';
 
 /** `pattern` is already normalised: lowercase ASCII, no trailing dot, optional `*.` prefix. It is the primary key. */
 export interface Rule {
@@ -53,6 +54,7 @@ export interface Settings {
   /** Plain host names (no dots, e.g. `intranet`) bypass the proxy when no rule matched. */
   bypassLocal: boolean;
   theme: Theme;
+  language: Language;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -61,6 +63,7 @@ export const DEFAULT_SETTINGS: Settings = {
   failoverDirect: true,
   bypassLocal: true,
   theme: 'auto',
+  language: 'auto',
 };
 
 export type ErrorCode =

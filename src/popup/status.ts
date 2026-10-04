@@ -1,6 +1,7 @@
 import { serializeProxy } from '../proxy/serialize.ts';
 import type { AppError, ErrorCode, PacSource, ProxyServer, RuntimeState, Settings } from '../types/index.ts';
 import { ago } from './format.ts';
+import { t } from './i18n.ts';
 
 export const ERROR_TITLE: Record<ErrorCode, string> = {
   pac_fetch_failed: 'PAC fetch failed',
@@ -32,7 +33,7 @@ export function describeStatus(
   now = Date.now(),
 ): StatusView {
   const rules = state.rulesTotal;
-  const base = settings.mode === 'direct' ? 'Direct' : settings.mode === 'proxy' ? 'Proxy' : 'PAC';
+  const base = t(settings.mode === 'direct' ? 'Direct' : settings.mode === 'proxy' ? 'Proxy' : 'PAC');
   const enabledPacs = (pacs ?? []).filter((p) => p.enabled);
   const newest = enabledPacs.reduce((m, p) => Math.max(m, p.fetch.lastSuccessAt), 0);
   const pac =
@@ -41,8 +42,8 @@ export function describeStatus(
       : enabledPacs.length === 0
         ? '—'
         : newest
-          ? `Updated ${ago(newest, now)}`
-          : 'Not downloaded yet';
+          ? t('Updated {when}', { when: ago(newest, now) })
+          : t('Not downloaded yet');
 
   let label: StatusView['label'] = 'ACTIVE';
   let tone: StatusView['tone'] = 'ok';
@@ -61,7 +62,7 @@ export function describeStatus(
   return {
     label,
     tone,
-    modeText: rules > 0 ? `${base} + rules` : base,
+    modeText: rules > 0 ? t('{mode} + rules', { mode: base }) : base,
     proxies: proxies.filter((p) => p.enabled).map(serializeProxy),
     rules,
     pac,

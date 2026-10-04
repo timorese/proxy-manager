@@ -3,7 +3,8 @@ import { buildIndex, lookup, type RuleIndex } from '../../domain-rules/matcher.t
 import { normalizePattern } from '../../domain-rules/normalize.ts';
 import type { Action, Rule } from '../../types/index.ts';
 import { h, setChildren, setText } from '../dom.ts';
-import { download, plural } from '../format.ts';
+import { download } from '../format.ts';
+import { plural, t } from '../i18n.ts';
 import { commit, repos, rulesState } from '../store.ts';
 import { VirtualList } from '../virtual-list.ts';
 import type { View } from './types.ts';
@@ -33,12 +34,12 @@ export function createRulesView(): View {
   const list = new VirtualList<Rule>({
     rowHeight: ROW_H,
     createRow() {
-      const sel = h('input', { type: 'checkbox', class: 'sel', attrs: { 'aria-label': 'Select rule' } });
+      const sel = h('input', { type: 'checkbox', class: 'sel', attrs: { 'aria-label': t('Select rule') } });
       const dom = h('span', { class: 'domain' });
       const act = h(
         'select',
         { class: 'act', attrs: { 'aria-label': 'Action' } },
-        ...ACTIONS.map((a) => h('option', { value: a, text: a.toUpperCase() })),
+        ...ACTIONS.map((a) => h('option', { value: a, text: t(a.toUpperCase()) })),
       );
       const en = h('input', { type: 'checkbox', class: 'en', attrs: { 'aria-label': 'Enabled' } });
       return h(
@@ -86,11 +87,11 @@ export function createRulesView(): View {
       empty,
       loaded
         ? all.length === 0
-          ? 'No rules yet. Add one or import a list.'
-          : 'Nothing matches.'
-        : 'Loading…',
+          ? t('No rules yet. Add one or import a list.')
+          : t('Nothing matches.')
+        : t('Loading…'),
     );
-    setText(count, query ? `${shown.length} of ${all.length}` : plural(all.length, 'rule'));
+    setText(count, query ? t('{a} of {b}', { a: shown.length, b: all.length }) : plural(all.length, 'rule'));
     updateBulk();
   };
 
@@ -147,8 +148,8 @@ export function createRulesView(): View {
   const count = h('span', { class: 'muted small' });
   const search = h('input', {
     type: 'search',
-    placeholder: 'Search domains…',
-    attrs: { 'aria-label': 'Search rules', spellcheck: 'false' },
+    placeholder: t('Search domains…'),
+    attrs: { 'aria-label': t('Search rules'), spellcheck: 'false' },
   });
   let raf = 0;
   search.addEventListener('input', () => {
@@ -164,18 +165,18 @@ export function createRulesView(): View {
   const addInput = h('input', {
     type: 'text',
     class: 'grow mono',
-    placeholder: 'example.com or *.example.com',
-    attrs: { 'aria-label': 'New rule', spellcheck: 'false' },
+    placeholder: t('example.com or *.example.com'),
+    attrs: { 'aria-label': t('New rule'), spellcheck: 'false' },
   });
   const addAction = h(
     'select',
-    { attrs: { 'aria-label': 'Action for new rule' } },
-    ...ACTIONS.map((a) => h('option', { value: a, text: a.toUpperCase(), selected: a === 'proxy' })),
+    { attrs: { 'aria-label': t('Action for new rule') } },
+    ...ACTIONS.map((a) => h('option', { value: a, text: t(a.toUpperCase()), selected: a === 'proxy' })),
   );
   const addErr = h('div', { class: 'small', style: 'color:var(--err)' });
   const add = () => {
     const n = normalizePattern(addInput.value);
-    if (!n.ok) return setText(addErr, `Invalid domain: ${n.error}`);
+    if (!n.ok) return setText(addErr, t('Invalid domain: {e}', { e: n.error }));
     setText(addErr, '');
     addInput.value = '';
     void upsert([{ pattern: n.pattern, action: addAction.value as Action, enabled: true }]).then(() => {
@@ -190,9 +191,9 @@ export function createRulesView(): View {
   const bulkInfo = h('span', { class: 'small' });
   const bulkAct = h(
     'select',
-    { attrs: { 'aria-label': 'Bulk action' } },
-    h('option', { value: '', text: 'Set action…' }),
-    ...ACTIONS.map((a) => h('option', { value: a, text: a.toUpperCase() })),
+    { attrs: { 'aria-label': t('Bulk action') } },
+    h('option', { value: '', text: t('Set action…') }),
+    ...ACTIONS.map((a) => h('option', { value: a, text: t(a.toUpperCase()) })),
   );
   bulkAct.addEventListener('change', () => {
     if (bulkAct.value) void mutate([...selected], { action: bulkAct.value as Action });
@@ -203,18 +204,18 @@ export function createRulesView(): View {
   bulkDel.addEventListener('click', () => {
     if (!armed) {
       armed = true;
-      bulkDel.textContent = `Delete ${selected.size}?`;
+      bulkDel.textContent = t('Delete {n}?', { n: selected.size });
       bulkDel.classList.add('armed');
       setTimeout(() => {
         armed = false;
         bulkDel.classList.remove('armed');
-        bulkDel.textContent = 'Delete';
+        bulkDel.textContent = t('Delete');
       }, 2500);
       return;
     }
     armed = false;
     bulkDel.classList.remove('armed');
-    bulkDel.textContent = 'Delete';
+    bulkDel.textContent = t('Delete');
     void remove([...selected]);
   });
   const bulk = h(
@@ -224,13 +225,13 @@ export function createRulesView(): View {
     h('button', {
       class: 'btn',
       type: 'button',
-      text: 'Enable',
+      text: t('Enable'),
       on: { click: () => void mutate([...selected], { enabled: true }) },
     }),
     h('button', {
       class: 'btn',
       type: 'button',
-      text: 'Disable',
+      text: t('Disable'),
       on: { click: () => void mutate([...selected], { enabled: false }) },
     }),
     bulkAct,
@@ -238,12 +239,12 @@ export function createRulesView(): View {
   );
   function updateBulk() {
     bulk.hidden = selected.size === 0;
-    setText(bulkInfo, `${selected.size} selected`);
+    setText(bulkInfo, t('{n} selected', { n: selected.size }));
     selAll.checked =
       shown.length > 0 && selected.size >= shown.length && shown.every((r) => selected.has(r.pattern));
   }
 
-  const selAll = h('input', { type: 'checkbox', attrs: { 'aria-label': 'Select all shown' } });
+  const selAll = h('input', { type: 'checkbox', attrs: { 'aria-label': t('Select all shown') } });
   selAll.addEventListener('change', () => {
     if (selAll.checked) for (const r of shown) selected.add(r.pattern);
     else for (const r of shown) selected.delete(r.pattern);
@@ -255,7 +256,7 @@ export function createRulesView(): View {
     h('button', {
       type: 'button',
       text: label,
-      title: `Sort by ${label.toLowerCase()}`,
+      title: t('Sort by {x}', { x: label.toLowerCase() }),
       on: {
         click: () => {
           sortKey = key;
@@ -286,52 +287,55 @@ export function createRulesView(): View {
     let text = '';
     const area = h('textarea', {
       rows: 6,
-      placeholder: 'google.com\nyoutube.com PROXY\n*.example.org DIRECT\n# comments are ignored',
-      attrs: { 'aria-label': 'Rules to import', spellcheck: 'false' },
+      placeholder: t('google.com\nyoutube.com PROXY\n*.example.org DIRECT\n# comments are ignored'),
+      attrs: { 'aria-label': t('Rules to import'), spellcheck: 'false' },
     });
     area.addEventListener('input', () => {
       text = area.value;
       if (text.length > 20_000) {
         // A textarea holding thousands of lines is expensive to lay out; keep the text in memory instead.
         area.value = '';
-        area.placeholder = `${(text.length / 1024).toFixed(0)} KB pasted. Press Preview.`;
+        area.placeholder = t('{kb} KB pasted. Press Preview.', { kb: (text.length / 1024).toFixed(0) });
       }
       setChildren(result);
     });
     const file = h('input', {
       type: 'file',
       accept: '.txt,.list,text/plain',
-      attrs: { 'aria-label': 'Import from file' },
+      attrs: { 'aria-label': t('Import from file') },
     });
     file.addEventListener('change', async () => {
       const f = file.files?.[0];
       if (!f) return;
       text = await f.text();
       area.value = '';
-      area.placeholder = `${f.name} loaded (${(f.size / 1024).toFixed(0)} KB). Press Preview.`;
+      area.placeholder = t('{name} loaded ({kb} KB). Press Preview.', {
+        name: f.name,
+        kb: (f.size / 1024).toFixed(0),
+      });
       setChildren(result);
     });
     const def = h(
       'select',
-      { attrs: { 'aria-label': 'Default action' } },
-      ...ACTIONS.map((a) => h('option', { value: a, text: a.toUpperCase(), selected: a === 'proxy' })),
+      { attrs: { 'aria-label': t('Default action') } },
+      ...ACTIONS.map((a) => h('option', { value: a, text: t(a.toUpperCase()), selected: a === 'proxy' })),
     );
     const result = h('div', { class: 'small', style: 'margin:6px 0' });
-    const preview = h('button', { class: 'btn', type: 'button', text: 'Preview' });
+    const preview = h('button', { class: 'btn', type: 'button', text: t('Preview') });
     preview.addEventListener('click', async () => {
-      setText(result, 'Parsing…');
+      setText(result, t('Parsing…'));
       await new Promise((r) => requestAnimationFrame(r)); // let "Parsing…" paint before the synchronous parse
       const parsed = parseImport(text, def.value as Action);
       const newCount = parsed.rules.reduce((n, r) => n + (byPattern.has(r.pattern) ? 0 : 1), 0);
       const go = h('button', {
         class: 'btn primary',
         type: 'button',
-        text: `Import ${parsed.rules.length.toLocaleString()}`,
+        text: t('Import {n}', { n: parsed.rules.length.toLocaleString() }),
         disabled: parsed.rules.length === 0,
       });
       go.addEventListener('click', async () => {
         go.disabled = true;
-        setText(go, 'Saving…');
+        setText(go, t('Saving…'));
         await upsert(parsed.rules);
         panel.replaceChildren();
       });
@@ -340,9 +344,13 @@ export function createRulesView(): View {
         h(
           'div',
           null,
-          `${plural(parsed.rules.length, 'rule')} (${newCount.toLocaleString()} new, ${(parsed.rules.length - newCount).toLocaleString()} overwrite)`,
+          t('{rules} ({fresh} new, {over} overwrite)', {
+            rules: plural(parsed.rules.length, 'rule'),
+            fresh: newCount.toLocaleString(),
+            over: (parsed.rules.length - newCount).toLocaleString(),
+          }),
           parsed.duplicates ? ` · ${plural(parsed.duplicates, 'duplicate')}` : '',
-          parsed.invalid ? ` · ${parsed.invalid.toLocaleString()} invalid` : '',
+          parsed.invalid ? ` · ${t('{n} invalid', { n: parsed.invalid.toLocaleString() })}` : '',
         ),
         parsed.issues.length > 0 &&
           h(
@@ -350,7 +358,9 @@ export function createRulesView(): View {
             { class: 'alert warn', style: 'margin:4px 0;max-height:70px;overflow:auto' },
             ...parsed.issues
               .slice(0, 5)
-              .map((i) => h('div', { text: `line ${i.line}: ${i.error} — ${i.text}` })),
+              .map((i) =>
+                h('div', { text: t('line {n}: {e} — {text}', { n: i.line, e: i.error, text: i.text }) }),
+              ),
           ),
         go,
       );
@@ -360,19 +370,19 @@ export function createRulesView(): View {
       h(
         'div',
         { class: 'card view-enter', style: 'margin-bottom:8px' },
-        h('h3', { text: 'Import rules' }),
+        h('h3', { text: t('Import rules') }),
         area,
         h('div', { class: 'row', style: 'margin-top:6px' }, file),
         h(
           'div',
           { class: 'row', style: 'margin-top:6px' },
-          h('span', { class: 'small muted', text: 'Default action' }),
+          h('span', { class: 'small muted', text: t('Default action') }),
           def,
           preview,
           h('button', {
             class: 'btn',
             type: 'button',
-            text: 'Close',
+            text: t('Close'),
             on: { click: () => panel.replaceChildren() },
           }),
         ),
@@ -384,19 +394,21 @@ export function createRulesView(): View {
   const testInput = h('input', {
     type: 'text',
     class: 'mono',
-    placeholder: 'test host: mail.example.com',
-    attrs: { 'aria-label': 'Test a host', spellcheck: 'false' },
+    placeholder: t('test host: mail.example.com'),
+    attrs: { 'aria-label': t('Test a host'), spellcheck: 'false' },
   });
   const testOut = h('div', { class: 'small muted' });
   testInput.addEventListener('input', () => {
     const n = normalizePattern(testInput.value);
     if (!n.ok || n.pattern.startsWith('*'))
-      return setText(testOut, testInput.value ? 'Enter a host name' : '');
+      return setText(testOut, testInput.value ? t('Enter a host name') : '');
     index ??= buildIndex(all);
     const hit = lookup(index, n.pattern);
     setText(
       testOut,
-      hit ? `→ ${hit.action.toUpperCase()} via ${hit.via}` : '→ no rule: default mode applies',
+      hit
+        ? t('→ {a} via {v}', { a: t(hit.action.toUpperCase()), v: hit.via })
+        : t('→ no rule: default mode applies'),
     );
   });
 
@@ -407,11 +419,11 @@ export function createRulesView(): View {
       'div',
       { class: 'toolbar' },
       search,
-      h('button', { class: 'btn', type: 'button', text: 'Import', on: { click: openImport } }),
+      h('button', { class: 'btn', type: 'button', text: t('Import'), on: { click: openImport } }),
       h('button', {
         class: 'btn',
         type: 'button',
-        text: 'Export',
+        text: t('Export'),
         on: { click: () => download('rules.txt', exportRules(all)) },
       }),
     ),
@@ -420,7 +432,7 @@ export function createRulesView(): View {
       { class: 'row', style: 'margin:6px 0' },
       addInput,
       addAction,
-      h('button', { class: 'btn primary', type: 'button', text: 'Add', on: { click: add } }),
+      h('button', { class: 'btn primary', type: 'button', text: t('Add'), on: { click: add } }),
     ),
     addErr,
     panel,
@@ -429,9 +441,9 @@ export function createRulesView(): View {
       'div',
       { class: 'table-head' },
       selAll,
-      sortBtn('domain', 'Domain'),
-      sortBtn('action', 'Action'),
-      sortBtn('state', 'On'),
+      sortBtn('domain', t('Domain')),
+      sortBtn('action', t('Action')),
+      sortBtn('state', t('On')),
     ),
     h(
       'div',
