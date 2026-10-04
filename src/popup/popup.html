@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PAC Proxy Manager</title>
+  <link rel="stylesheet" href="./popup.css">
+  <script src="../theme-boot.js"></script>
+  <script type="module" src="./main.ts"></script>
+</head>
+<body>
+  <!-- Static shell: painted before any JS or storage read finishes. -->
+  <header class="top">
+    <div class="brand"><span class="logo" aria-hidden="true"></span><span>PAC Proxy</span></div>
+    <label class="switch" title="Proxy on / off">
+      <input id="power" type="checkbox" aria-label="Proxy on/off" disabled>
+      <span class="track"></span>
+    </label>
+  </header>
+  <div class="tabs" role="tablist">
+    <button type="button" role="tab" data-tab="proxy" aria-selected="true">Proxy</button>
+    <button type="button" role="tab" data-tab="pac" aria-selected="false">PAC</button>
+    <button type="button" role="tab" data-tab="rules" aria-selected="false">Rules</button>
+    <button type="button" role="tab" data-tab="settings" aria-selected="false">Settings</button>
+  </div>
+  <main id="view">
+    <div class="skeleton" aria-hidden="true"><i></i><i></i><i></i></div>
+  </main>
+</body>
+</html>

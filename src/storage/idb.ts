@@ -3,7 +3,7 @@ import type { PacRepository, RuleRepository } from './repositories.ts';
 
 export const DB_NAME = 'ppm2';
 export const DB_VERSION = 1;
-const RULES = 'rules';
+const RULES = 'ruleBuckets';
 const PACS = 'pacs';
 const BODIES = 'pacBodies';
 
@@ -33,7 +33,7 @@ export class Database {
       const r = this.factory.open(DB_NAME, DB_VERSION);
       r.onupgradeneeded = () => {
         const db = r.result;
-        if (!db.objectStoreNames.contains(RULES)) db.createObjectStore(RULES, { keyPath: 'pattern' });
+        if (!db.objectStoreNames.contains(RULES)) db.createObjectStore(RULES, { keyPath: 'id' });
         if (!db.objectStoreNames.contains(PACS)) db.createObjectStore(PACS, { keyPath: 'id' });
         if (!db.objectStoreNames.contains(BODIES)) db.createObjectStore(BODIES);
       };
@@ -54,6 +54,38 @@ export class Database {
   }
 }
 
+/**
+ * Rules are stored in BUCKET_COUNT records of ~N/256 rules each, not one record per rule.
+ * Measured in Chromium (benchmarks/idb-layout.mjs): 50 000 per-rule puts block the main thread ~850 ms
+ * and take 3.4 s to commit; 256 bucket puts take ~60 ms / 72 ms. A single-rule edit rewrites ~200 rules.
+ * `bucketOf` is part of the on-disk format: do not change it without a schema migration.
+ */
+export const BUCKET_COUNT = 256;
+export function bucketOf(pattern: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < pattern.length; i++) {
+    h ^= pattern.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return (h >>> 0) % BUCKET_COUNT;
+}
+
+function groupByBucket<T>(items: readonly T[], key: (t: T) => string): Map<number, T[]> {
+  const groups = new Map<number, T[]>();
+  for (const it of items) {
+    const id = bucketOf(key(it));
+    const g = groups.get(id);
+    if (g) g.push(it);
+    else groups.set(id, [it]);
+  }
+  return groups;
+}
+
+interface Bucket {
+  id: number;
+  rules: Rule[];
+}
+
 export class IdbRuleRepository implements RuleRepository {
   private readonly db: Database;
   constructor(db: Database) {
@@ -62,30 +94,57 @@ export class IdbRuleRepository implements RuleRepository {
 
   async getAll(): Promise<Rule[]> {
     const db = await this.db.open();
-    return req(db.transaction(RULES, 'readonly').objectStore(RULES).getAll() as IDBRequest<Rule[]>);
+    const buckets = await req(
+      db.transaction(RULES, 'readonly').objectStore(RULES).getAll() as IDBRequest<Bucket[]>,
+    );
+    const out: Rule[] = [];
+    for (const b of buckets) for (let i = 0; i < b.rules.length; i++) out.push(b.rules[i]!);
+    return out;
   }
 
   async count(): Promise<number> {
     const db = await this.db.open();
-    return req(db.transaction(RULES, 'readonly').objectStore(RULES).count());
+    const buckets = await req(
+      db.transaction(RULES, 'readonly').objectStore(RULES).getAll() as IDBRequest<Bucket[]>,
+    );
+    return buckets.reduce((n, b) => n + b.rules.length, 0);
+  }
+
+  /** ONE transaction: read-modify-write of every touched bucket. */
+  private async modify(
+    ids: Iterable<number>,
+    edit: (bucket: Map<string, Rule>, id: number) => void,
+  ): Promise<void> {
+    const db = await this.db.open();
+    const tx = db.transaction(RULES, 'readwrite');
+    const store = tx.objectStore(RULES);
+    for (const id of ids) {
+      const get = store.get(id) as IDBRequest<Bucket | undefined>;
+      get.onsuccess = () => {
+        const map = new Map<string, Rule>();
+        for (const r of get.result?.rules ?? []) map.set(r.pattern, r);
+        edit(map, id);
+        if (map.size === 0) store.delete(id);
+        else store.put({ id, rules: [...map.values()] } satisfies Bucket);
+      };
+    }
+    await done(tx);
   }
 
   async putMany(rules: readonly Rule[]): Promise<void> {
     if (rules.length === 0) return;
-    const db = await this.db.open();
-    const tx = db.transaction(RULES, 'readwrite');
-    const store = tx.objectStore(RULES);
-    for (let i = 0; i < rules.length; i++) store.put(rules[i]);
-    await done(tx);
+    const groups = groupByBucket(rules, (r) => r.pattern);
+    await this.modify(groups.keys(), (map, id) => {
+      for (const r of groups.get(id)!) map.set(r.pattern, r);
+    });
   }
 
   async deleteMany(patterns: readonly string[]): Promise<void> {
     if (patterns.length === 0) return;
-    const db = await this.db.open();
-    const tx = db.transaction(RULES, 'readwrite');
-    const store = tx.objectStore(RULES);
-    for (let i = 0; i < patterns.length; i++) store.delete(patterns[i]!);
-    await done(tx);
+    const groups = groupByBucket(patterns, (p) => p);
+    await this.modify(groups.keys(), (map, id) => {
+      for (const p of groups.get(id)!) map.delete(p);
+    });
   }
 
   async clear(): Promise<void> {

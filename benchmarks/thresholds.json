@@ -1,0 +1,23 @@
+{
+  "_scaling": { "maxMissRatio": 12 },
+  "100": { "pacBytes": 12000 },
+  "1000": { "pacBytes": 70000, "compileMs": 60 },
+  "10000": {
+    "pacBytes": 500000,
+    "compileMs": 200,
+    "pipelineMs": 400,
+    "importMs": 150,
+    "lookupMissUs": 5,
+    "lookupExactUs": 5,
+    "lookupWildcardUs": 6
+  },
+  "50000": {
+    "pacBytes": 2400000,
+    "compileMs": 1000,
+    "pipelineMs": 2000,
+    "importMs": 700,
+    "lookupMissUs": 8,
+    "searchMs": 15,
+    "hashMs": 100
+  }
+}

@@ -117,3 +117,27 @@ describe('hashing', () => {
     expect(await hashString('function FindProxyForURL(){} ')).not.toBe(a);
   });
 });
+
+describe('rule bucket layout (on-disk format)', () => {
+  it('bucketOf is stable: it is part of the stored format', async () => {
+    const { bucketOf, BUCKET_COUNT } = await import('../src/storage/idb.ts');
+    expect(BUCKET_COUNT).toBe(256);
+    expect(bucketOf('')).toBe(2166136261 % 256);
+    // golden values: changing them orphans every stored rule
+    expect([bucketOf('example.com'), bucketOf('*.google.com')]).toEqual([38, 81]);
+    expect(bucketOf('example.com')).toBeGreaterThanOrEqual(0);
+    expect(bucketOf('example.com')).toBeLessThan(256);
+  });
+  it('edits in one bucket do not disturb others; empty buckets are removed', async () => {
+    const { repos } = makeEnv();
+    const rules = Array.from({ length: 2000 }, (_, i) => rule(`h${i}.example.com`, 'proxy'));
+    await repos.rules.putMany(rules);
+    await repos.rules.deleteMany(rules.slice(0, 1000).map((r) => r.pattern));
+    expect(await repos.rules.count()).toBe(1000);
+    await repos.rules.putMany([{ ...rules[1500]!, action: 'direct' }]);
+    const all = await repos.rules.getAll();
+    expect(all.filter((r) => r.action === 'direct')).toHaveLength(1);
+    await repos.rules.deleteMany(rules.map((r) => r.pattern));
+    expect(await repos.rules.count()).toBe(0);
+  });
+});

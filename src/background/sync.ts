@@ -108,7 +108,7 @@ export class SyncEngine {
       const usable: { id: string; text: string }[] = [];
       for (const s of wanted) {
         const body = bodies.get(s.id);
-        if (body === undefined) {
+        if (!body) {
           err('pac_compile_failed', `${s.name}: no downloaded script yet`);
           continue;
         }

@@ -1,0 +1,91 @@
+{
+  "node": "v22.22.0",
+  "results": {
+    "100": {
+      "normalizeMs": 0.2854419999999891,
+      "importMs": 0.39254200000002015,
+      "compileMs": 0.09230800000000272,
+      "pipelineMs": 0.21704400000001556,
+      "hashMs": 0.2759709999999984,
+      "pacBytes": 1562,
+      "pacGzBytes": 785,
+      "loadMs": 0.5830780000000004,
+      "lookupExactUs": 0.8689993250000007,
+      "lookupWildcardUs": 1.5572347499999992,
+      "lookupMissUs": 1.322117275000001,
+      "searchMs": 0.007994000000053347,
+      "sortMs": 0.01755399999990459
+    },
+    "1000": {
+      "normalizeMs": 0.3609559999999874,
+      "importMs": 1.9361790000000383,
+      "compileMs": 0.2993529999999964,
+      "pipelineMs": 1.3359940000000279,
+      "hashMs": 0.24503100000003997,
+      "pacBytes": 10094,
+      "pacGzBytes": 3095,
+      "loadMs": 0.7821860000000243,
+      "lookupExactUs": 0.927026650000002,
+      "lookupWildcardUs": 1.4932489250000003,
+      "lookupMissUs": 2.418444199999999,
+      "searchMs": 0.11285799999996016,
+      "sortMs": 0.3269000000000233
+    },
+    "10000": {
+      "normalizeMs": 2.9393139999999676,
+      "importMs": 19.47118599999999,
+      "compileMs": 2.7791819999999916,
+      "pipelineMs": 11.679837000000134,
+      "hashMs": 0.767455999999811,
+      "pacBytes": 98118,
+      "pacGzBytes": 24677,
+      "loadMs": 1.2139060000001791,
+      "lookupExactUs": 1.072413825000001,
+      "lookupWildcardUs": 1.8635578250000038,
+      "lookupMissUs": 1.292116575,
+      "searchMs": 0.315462000000025,
+      "sortMs": 4.223545999999942
+    },
+    "50000": {
+      "normalizeMs": 16.07858800000031,
+      "importMs": 75.59516299999996,
+      "compileMs": 23.423718000000008,
+      "pipelineMs": 109.35319200000004,
+      "hashMs": 2.8645300000002862,
+      "pacBytes": 500843,
+      "pacGzBytes": 117043,
+      "loadMs": 5.490875000000415,
+      "lookupExactUs": 1.0372716499999912,
+      "lookupWildcardUs": 1.6169479749999938,
+      "lookupMissUs": 1.3675129250000055,
+      "searchMs": 1.5286870000018098,
+      "sortMs": 25.254605999998603
+    }
+  },
+  "strategies": [
+    {
+      "strategy": "legacy linear scan",
+      "exact ns": 264,
+      "wildcard sub ns": 1278514,
+      "miss ns": 1588673
+    },
+    {
+      "strategy": "null-proto object + suffix walk (shipped)",
+      "exact ns": 49,
+      "wildcard sub ns": 367,
+      "miss ns": 319
+    },
+    {
+      "strategy": "Map + suffix walk",
+      "exact ns": 51,
+      "wildcard sub ns": 266,
+      "miss ns": 206
+    },
+    {
+      "strategy": "reversed-label trie",
+      "exact ns": 818,
+      "wildcard sub ns": 750,
+      "miss ns": 867
+    }
+  ]
+}

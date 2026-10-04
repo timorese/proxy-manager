@@ -10,7 +10,7 @@ export default defineConfig(({ mode }) => ({
     outDir: resolve(import.meta.dirname, 'dist'),
     emptyOutDir: true,
     target: 'chrome120',
-    minify: mode === 'development' ? false : 'esbuild',
+    minify: mode !== 'development',
     sourcemap: mode === 'development',
     cssCodeSplit: false,
     modulePreload: false,
