@@ -1,9 +1,16 @@
 {
-  "_scaling": { "maxMissRatio": 12 },
-  "100": { "pacBytes": 12000 },
-  "1000": { "pacBytes": 70000, "compileMs": 60 },
+  "_scaling": {
+    "maxMissRatio": 12
+  },
+  "100": {
+    "pacBytes": 1700
+  },
+  "1000": {
+    "pacBytes": 11000,
+    "compileMs": 60
+  },
   "10000": {
-    "pacBytes": 500000,
+    "pacBytes": 105000,
     "compileMs": 200,
     "pipelineMs": 400,
     "importMs": 150,
@@ -12,7 +19,7 @@
     "lookupWildcardUs": 6
   },
   "50000": {
-    "pacBytes": 2400000,
+    "pacBytes": 540000,
     "compileMs": 1000,
     "pipelineMs": 2000,
     "importMs": 700,

@@ -32,7 +32,10 @@ const closure = (entry) => {
   while (q.length) {
     const f = q.pop();
     const { stat, dyn } = imports(f);
-    for (const s of stat) if (!seen.has(s)) seen.add(s), q.push(s);
+    for (const s of stat) if (!seen.has(s)) {
+        seen.add(s);
+        q.push(s);
+      }
     for (const d of dyn) lazy.add(d);
   }
   return { eager: [...seen], lazy: [...lazy].filter((l) => !seen.has(l)) };

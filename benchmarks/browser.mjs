@@ -404,6 +404,28 @@ console.table(rows);
       'longest main-thread task ms': Math.round(longest),
       'worker applied after ms': Date.now() - s3,
     });
+    if (n === 50000) {
+      // Does real Chrome accept and correctly execute the large generated PAC?
+      await p.click('button[data-tab="proxy"]');
+      if (!(await p.isChecked('#power'))) await p.click('#power');
+      await p.waitForFunction(() => document.querySelector('.badge')?.textContent === 'ACTIVE', null, {
+        timeout: 15000,
+      });
+      const cfg = await p.evaluate(() => chrome.proxy.settings.get({ incognito: false }));
+      const probe = await ctx.newPage();
+      hits.length = 0;
+      await probe.goto('http://i0.imp0.org/', { timeout: 15000 }).catch(() => {});
+      const viaProxy = hits.some((u) => u.includes('i0.imp0.org'));
+      hits.length = 0;
+      await probe.goto('http://i1.imp1.org/', { timeout: 8000 }).catch(() => {});
+      const direct = !hits.some((u) => u.includes('i1.imp1.org')); // i1 is DIRECT in the imported list
+      ok(
+        viaProxy && direct,
+        `Chrome accepted and executed a ${(cfg.value.pacScript.data.length / 1024).toFixed(0)} KB PAC (50 000 imported rules): PROXY rule proxied, DIRECT rule direct`,
+      );
+      await probe.close();
+      await p.click('#power');
+    }
     await p.close();
   }
   console.log('\n== Bulk import via UI ==');

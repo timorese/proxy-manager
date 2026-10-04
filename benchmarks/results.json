@@ -2,90 +2,90 @@
   "node": "v22.22.0",
   "results": {
     "100": {
-      "normalizeMs": 0.2854419999999891,
-      "importMs": 0.39254200000002015,
-      "compileMs": 0.09230800000000272,
-      "pipelineMs": 0.21704400000001556,
-      "hashMs": 0.2759709999999984,
+      "normalizeMs": 0.22925499999999488,
+      "importMs": 0.35329300000000785,
+      "compileMs": 0.11038500000000795,
+      "pipelineMs": 0.2701699999999789,
+      "hashMs": 0.3884779999999921,
       "pacBytes": 1562,
       "pacGzBytes": 785,
-      "loadMs": 0.5830780000000004,
-      "lookupExactUs": 0.8689993250000007,
-      "lookupWildcardUs": 1.5572347499999992,
-      "lookupMissUs": 1.322117275000001,
-      "searchMs": 0.007994000000053347,
-      "sortMs": 0.01755399999990459
+      "loadMs": 0.7640600000000006,
+      "lookupExactUs": 1.6858727750000007,
+      "lookupWildcardUs": 1.4559337749999997,
+      "lookupMissUs": 1.424347,
+      "searchMs": 0.01113199999997505,
+      "sortMs": 0.016165000000000873
     },
     "1000": {
-      "normalizeMs": 0.3609559999999874,
-      "importMs": 1.9361790000000383,
-      "compileMs": 0.2993529999999964,
-      "pipelineMs": 1.3359940000000279,
-      "hashMs": 0.24503100000003997,
+      "normalizeMs": 0.32321600000000217,
+      "importMs": 1.7785689999999477,
+      "compileMs": 0.4029360000000679,
+      "pipelineMs": 1.4054930000000923,
+      "hashMs": 0.28549099999997907,
       "pacBytes": 10094,
       "pacGzBytes": 3095,
-      "loadMs": 0.7821860000000243,
-      "lookupExactUs": 0.927026650000002,
-      "lookupWildcardUs": 1.4932489250000003,
-      "lookupMissUs": 2.418444199999999,
-      "searchMs": 0.11285799999996016,
-      "sortMs": 0.3269000000000233
+      "loadMs": 0.47366999999997006,
+      "lookupExactUs": 1.2212170499999986,
+      "lookupWildcardUs": 1.5650414000000012,
+      "lookupMissUs": 1.7794809499999984,
+      "searchMs": 0.06461599999988721,
+      "sortMs": 0.3605529999999817
     },
     "10000": {
-      "normalizeMs": 2.9393139999999676,
-      "importMs": 19.47118599999999,
-      "compileMs": 2.7791819999999916,
-      "pipelineMs": 11.679837000000134,
-      "hashMs": 0.767455999999811,
+      "normalizeMs": 5.518788000000086,
+      "importMs": 17.594401999999945,
+      "compileMs": 3.358564000000115,
+      "pipelineMs": 11.845010999999886,
+      "hashMs": 0.7982029999998304,
       "pacBytes": 98118,
       "pacGzBytes": 24677,
-      "loadMs": 1.2139060000001791,
-      "lookupExactUs": 1.072413825000001,
-      "lookupWildcardUs": 1.8635578250000038,
-      "lookupMissUs": 1.292116575,
-      "searchMs": 0.315462000000025,
-      "sortMs": 4.223545999999942
+      "loadMs": 1.2516749999999774,
+      "lookupExactUs": 1.576577999999995,
+      "lookupWildcardUs": 2.8225233000000003,
+      "lookupMissUs": 1.2981884250000006,
+      "searchMs": 0.27922400000011294,
+      "sortMs": 4.090807000000041
     },
     "50000": {
-      "normalizeMs": 16.07858800000031,
-      "importMs": 75.59516299999996,
-      "compileMs": 23.423718000000008,
-      "pipelineMs": 109.35319200000004,
-      "hashMs": 2.8645300000002862,
+      "normalizeMs": 18.560572999999977,
+      "importMs": 76.22948099999985,
+      "compileMs": 19.4572390000003,
+      "pipelineMs": 70.2125619999997,
+      "hashMs": 3.0073099999999613,
       "pacBytes": 500843,
       "pacGzBytes": 117043,
-      "loadMs": 5.490875000000415,
-      "lookupExactUs": 1.0372716499999912,
-      "lookupWildcardUs": 1.6169479749999938,
-      "lookupMissUs": 1.3675129250000055,
-      "searchMs": 1.5286870000018098,
-      "sortMs": 25.254605999998603
+      "loadMs": 7.416302999999971,
+      "lookupExactUs": 1.1656432999999993,
+      "lookupWildcardUs": 1.7777877749999902,
+      "lookupMissUs": 1.3459331750000048,
+      "searchMs": 1.4264859999998407,
+      "sortMs": 23.7535469999998
     }
   },
   "strategies": [
     {
       "strategy": "legacy linear scan",
-      "exact ns": 264,
-      "wildcard sub ns": 1278514,
-      "miss ns": 1588673
+      "exact ns": 135,
+      "wildcard sub ns": 1258534,
+      "miss ns": 1421401
     },
     {
       "strategy": "null-proto object + suffix walk (shipped)",
-      "exact ns": 49,
-      "wildcard sub ns": 367,
-      "miss ns": 319
+      "exact ns": 50,
+      "wildcard sub ns": 350,
+      "miss ns": 325
     },
     {
       "strategy": "Map + suffix walk",
-      "exact ns": 51,
-      "wildcard sub ns": 266,
-      "miss ns": 206
+      "exact ns": 63,
+      "wildcard sub ns": 264,
+      "miss ns": 241
     },
     {
       "strategy": "reversed-label trie",
-      "exact ns": 818,
-      "wildcard sub ns": 750,
-      "miss ns": 867
+      "exact ns": 948,
+      "wildcard sub ns": 714,
+      "miss ns": 773
     }
   ]
 }

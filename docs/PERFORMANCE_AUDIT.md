@@ -144,3 +144,22 @@ Severity: **C** critical, **H** high, **M** medium, **L** low.
 | 9 | 291 KB popup | vanilla TS popup, tiny |
 | 10–12 | i18n/state/IDB inefficiencies | lazy, virtual list, split meta/body |
 | 13 | broad host permissions | optional, per-origin |
+
+## Measured in real Chromium (popup cold open, legacy v1.1.2)
+
+`LEGACY_DIR=<clone> node benchmarks/browser.mjs` loads the legacy build as an unpacked extension (headless Chromium,
+this sandbox) and measures `navigation start → Exceptions tab input visible`, median of 5, with N domain exceptions in
+`chrome.storage.local`:
+
+| exceptions in storage | cold open to usable UI |
+|----------------------:|-----------------------:|
+| 0                     | 89 ms                  |
+| 1 000                 | 98 ms                  |
+| 10 000                | 111 ms                 |
+| 50 000                | **271 ms**             |
+
+The growth comes from findings #2/#11 (whole-object read + two `Object.keys().filter().join()` passes + two controlled
+textareas filled with every domain). New popup on the same machine: 45–58 ms at every size (see `docs/PERFORMANCE.md`;
+the new popup defers rule loading until the Rules tab is opened, so its home screen does not depend on N at all).
+
+Caveat: headless Chromium in a container, one machine. Compare the ratios, not the absolute numbers.
