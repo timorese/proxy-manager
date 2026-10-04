@@ -1,8 +1,15 @@
 name: Release
 
+# 1) Publishing a release in the GitHub UI attaches the zip automatically.
+# 2) Actions tab -> "Release" -> Run workflow -> enter an existing tag (e.g. 1.0) to attach the zip to that release.
 on:
-  push:
-    tags: ['v*']
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing release tag to build and attach the zip to
+        required: true
 
 permissions:
   contents: write
@@ -10,8 +17,12 @@ permissions:
 jobs:
   release:
     runs-on: ubuntu-latest
+    env:
+      TAG: ${{ github.event.release.tag_name || inputs.tag }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -20,12 +31,8 @@ jobs:
       - run: npm run lint
       - run: npm run typecheck
       - run: npm test
-      - run: npm run build
-      - name: Package
-        run: |
-          VERSION="${GITHUB_REF_NAME#v}"
-          (cd dist && zip -r -X "../pac-proxy-manager-${VERSION}.zip" .)
+      - run: npm run package
       - uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ env.TAG }}
           files: pac-proxy-manager-*.zip
-          generate_release_notes: true

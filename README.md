@@ -59,4 +59,4 @@ Load `dist/` via `chrome://extensions` → Developer mode → *Load unpacked*.
 1. Download `pac-proxy-manager-<version>.zip` from the GitHub *Releases* page and unzip it into a folder you will keep.
 2. `chrome://extensions` → enable *Developer mode* → *Load unpacked* → pick that folder.
 
-Maintainers: push a tag (`git tag v2.0.0 && git push origin v2.0.0`); `.github/workflows/release.yml` lints, tests, builds and attaches the zip.
+Maintainers: publish a release in the GitHub UI and `.github/workflows/release.yml` lints, tests, builds and attaches the zip. For an existing release: Actions → Release → Run workflow → enter its tag.
